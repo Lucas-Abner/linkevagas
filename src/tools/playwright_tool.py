@@ -33,23 +33,34 @@ def buscar_multiplas_vagas(termo_pesquisa, quantidade_vagas = 5):
 
         page.wait_for_timeout(2000)
 
-        cards_vagas = page.locator("li.scaffold-layout__list-item").all()
+        total_vagas = page.locator("li.scaffold-layout__list-item").count()
 
-        quantidade_encontradas = min(quantidade_vagas, len(cards_vagas))
-        print(f"Encontradas {len(cards_vagas)} vagas. Extraindo as {quantidade_encontradas} primeiras...")
+        quantidade_encontradas = min(quantidade_vagas, total_vagas)
+        print(f"Encontradas {total_vagas} vagas. Extraindo as {quantidade_encontradas} primeiras...")
 
         for i in range(quantidade_encontradas):
-            card = cards_vagas[i]
-            
-            card.scroll_into_view_if_needed()
+            # Aguarda a lista recarregar e re-seleciona o card pelo índice a cada iteração
+            page.wait_for_selector("li.scaffold-layout__list-item")
+            page.wait_for_timeout(500)
+
+            cards = page.locator("li.scaffold-layout__list-item")
+            card = cards.nth(i)
+
+            try:
+                card.scroll_into_view_if_needed(timeout=5000)
+            except Exception:
+                # Se o elemento não estiver disponível, espera mais e tenta novamente
+                page.wait_for_timeout(1000)
+                cards = page.locator("li.scaffold-layout__list-item")
+                card = cards.nth(i)
+                card.scroll_into_view_if_needed(timeout=5000)
 
             card.click()
 
-            page.wait_for_timeout(1500)
-            page.wait_for_selector("#job-details")
+            page.wait_for_timeout(2000)
+            page.wait_for_selector("#job-details", timeout=10000)
 
             titulo_locator = page.locator(".job-details-jobs-unified-top-card__job-title")
-
             titulo = titulo_locator.inner_text() if titulo_locator.count() > 0 else "Titulo não encontrado"
 
             descricao_page = page.locator("#job-details")
