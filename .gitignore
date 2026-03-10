@@ -148,6 +148,7 @@ venv.bak/
 *.pdf
 *.docx
 *.doc
+*.md
 
 # Spyder project settings
 .spyderproject

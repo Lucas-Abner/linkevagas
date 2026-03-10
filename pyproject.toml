@@ -7,6 +7,9 @@ requires-python = ">=3.12"
 packages = [{include = "src"}]
 dependencies = [
     "agno>=2.5.8",
+    "ipython>=9.11.0",
+    "markdown-pdf>=1.13.1",
+    "markitdown[all]>=0.1.5",
     "ollama>=0.6.1",
     "openai>=2.26.0",
     "pdf2docx>=0.5.11",
