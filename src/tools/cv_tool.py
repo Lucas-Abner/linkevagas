@@ -31,11 +31,11 @@ def ler_cv_base_md() -> str:
     md = MarkItDown()
     pdf_path = "/home/lucas.abner/Documentos/code/linkevagas/Lucas_Abner_Caixeta_CV_AI_Engineer_Jr.pdf"
     pdf_path2 = "C:\\Users\\asus\\Documents\\IA\\linkevagas\\Lucas_Abner_Caixeta_CV_AI_Engineer_Jr.pdf"
-    pdf_md = md.convert(pdf_path2)
+    pdf_md = md.convert(pdf_path) if os.path.exists(pdf_path) else md.convert(pdf_path2)
 
     conteudo_cv = pdf_md.text_content
 
-    caminho_md = pdf_path2.replace(".pdf", ".md")
+    caminho_md = pdf_path.replace(".pdf", ".md")
     # display(Markdown(f"{caminho_md}"))
 
     with open(caminho_md, "w", encoding="utf-8") as f:
@@ -50,7 +50,8 @@ def salvar_cv_otimizado_md(conteudo_md: str, nome_vaga: str) -> str:
     """
     Ferramenta para a IA salvar o currículo otimizado gerado.
     """
-    nome_arquivo = f"cv_{nome_vaga.replace(' ', '_').lower()}.md"
+    nome_arquivo = f"cv_{nome_vaga[:500].replace(' ', '_').lower()}.md"
+    print(f"Salvando currículo otimizado como {nome_arquivo}...")
     with open(nome_arquivo, "w", encoding="utf-8") as f:
         f.write(conteudo_md)
     return f"Salvo com sucesso em {nome_arquivo}"

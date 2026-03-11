@@ -2,6 +2,7 @@ from agno.agent import Agent
 from pydantic import BaseModel, Field
 from typing import List
 from agno.models.openai import OpenAIResponses
+from agno.models.ollama import Ollama
 from agno.models.message import Message
 from agno.utils.pprint import pprint_run_response
 import os
@@ -9,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from src.tools.playwright_tool import buscar_multiplas_vagas
+from src.tools.playwright_tool import buscar_multiplas_vagas, tool_envio_candidatura
 # Importando o novo arsenal de ferramentas
 from src.tools.cv_tool import ler_cv_base_md, salvar_cv_otimizado_md, converter_md_para_pdf
 
@@ -79,10 +80,12 @@ IDIOMAS
 ]
 
 
-MODEL_CONFIG = OpenAIResponses(base_url="https://api.groq.com/openai/v1", id="openai/gpt-oss-20b", api_key=os.environ.get("GROQ_API_KEY"))
+MODEL_CONFIG = OpenAIResponses(base_url="https://api.groq.com/openai/v1", id="qwen/qwen3-32b", api_key=os.environ.get("GROQ_API_KEY"))
+MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
+MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:9b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
 
-buscar_vagas = "Agente de IA"
-quantidade_vagas = 2 # Recomendado processar 1 por vez para não confundir o modelo local
+buscar_vagas = os.environ.get("BUSCAR_VAGA", "Agente de IA")
+quantidade_vagas = os.environ.get("QUANTIDADE_VAGAS", 1)  # Recomendado processar 1 por vez para não confundir o modelo local
 
 # O Schema se mantém APENAS para o extrator ATS
 class ATSExtract(BaseModel):
@@ -94,7 +97,7 @@ vagas_escolhidas = buscar_multiplas_vagas(buscar_vagas, quantidade_vagas)
 
 analista_ats = Agent(
     name="Analista de ATS",
-    model=MODEL_CONFIG,
+    model=MODEL_OLLAMA_QWEN2,  # Usando o modelo mais leve para análise de vaga
     description="Analisa descrições de vagas e extrai os termos essenciais.",
     instructions=f"Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. Extraia as informações de forma ATÔMICA e CURTA (máximo 3 palavras por item). Transforme exigências complexas em tags diretas. Se houver a palavra 'ou', coloque na lista de desejaveis.",
     expected_output="Gere o output estritamente preenchendo o schema de technical_terms, soft_skills e desejaveis.",
@@ -111,7 +114,7 @@ analista_ats = Agent(
 # ═════════════════════════════════════════════
 agente_leitor = Agent(
     name="Leitor de CV",
-    model=MODEL_CONFIG,
+    model=MODEL_OLLAMA_QWEN3,
     description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
     instructions="""Você tem UMA única responsabilidade: recuperar o conteúdo do currículo base.
 
@@ -134,7 +137,7 @@ agente_leitor = Agent(
 # ═════════════════════════════════════════════
 agente_redator = Agent(
     name="Redator de CV",
-    model=MODEL_CONFIG,
+    model=MODEL_OLLAMA_QWEN3,
     description="Reescreve o currículo em Markdown otimizado para ATS e salva o arquivo.",
     instructions=f"""Você recebe dois insumos via prompt:
     - CONTEÚDO_BASE: o currículo original do candidato (fornecido pelo Leitor de CV).
@@ -153,14 +156,103 @@ agente_redator = Agent(
        CONTEÚDO_BASE. Se precisar de seções novas, use apenas títulos genéricos como
        "EXPERIÊNCIA ADICIONAL" ou "FORMAÇÃO COMPLEMENTAR".
        Não adicione mais nada além do necessário. Zero criatividade extra. Sua missão é reescrever, não analisar ou comentar.
+       Escolha apenas um formato de estruturação do curriculo (ex: se escolher virgula para separar skills, mantenha esse formato para todas as skills, não misture virgula com bullet points ou outros formatos).
     """,
     additional_input=support_format_cv,
     # tools=[salvar_cv_otimizado_md],
 )
 
+
+
+# agente_redator = Agent(
+#     name="Redator de CV",
+#     model=MODEL_OLLAMA_QWEN2,
+#     description="Reescreve currículo em Markdown otimizado para ATS.",
+#     instructions=f"""
+# Você recebe:
+
+# CONTEÚDO_BASE → currículo original do candidato  
+# TERMOS_ATS → palavras-chave da vaga
+
+# OBJETIVO:
+# Reescrever o currículo para melhorar compatibilidade com ATS.
+
+# REGRAS:
+
+# 1. CONTEÚDO_BASE é a única fonte de verdade.
+# 2. Nunca invente experiências, ferramentas, cargos ou formação.
+# 3. Use TERMOS_ATS apenas se forem compatíveis com o histórico real.
+
+# ESTRUTURA DO CURRÍCULO:
+
+# ### Nome
+
+# **Localização | Email | Telefone**  
+# **GitHub | LinkedIn**
+
+# **Resumo Profissional**
+# Parágrafo curto destacando:
+# - área de atuação
+# - principais tecnologias
+# - palavras-chave relevantes
+
+# **Habilidades Técnicas**
+
+# Formato obrigatório:
+
+# Categoria: tecnologia, tecnologia, tecnologia
+
+# Exemplo:
+# Linguagens: Python, SQL  
+# Frameworks: FastAPI, LangChain  
+# IA: LLMs, RAG, Machine Learning
+
+# **Experiência Profissional**
+
+# Cargo – Empresa | Local | Período
+
+# Bullets devem seguir:
+
+# Ação + tecnologia + aplicação
+
+# Exemplo:
+# - Desenvolveu agentes de IA com CrewAI para automação de processos.
+# - Implementou APIs REST com FastAPI para disponibilizar modelos de ML.
+# - Implantou LLMs locais com Ollama em ambiente HPC.
+
+# **Projetos**
+# Descrição + tecnologias usadas.
+
+# **Formação**
+
+# Curso – Instituição | Ano
+
+# **Certificações**
+
+# Lista simples.
+
+# REGRAS ATS:
+
+# - Use linguagem simples
+# - repita palavras-chave relevantes
+# - evite tabelas, colunas ou emojis
+# - mantenha estrutura consistente
+
+# SAÍDA:
+
+# Retorne apenas o currículo reescrito em Markdown.
+# Não explique nada.
+# """,
+#     additional_input=support_format_cv,
+# )
+
+
+
+
+
 agente_copia_cola = Agent(
     name="Copia e Cola",
-    model=MODEL_CONFIG,
+    model=MODEL_OLLAMA_QWEN2,
     description="Agente intermediário para passar o nome do arquivo Markdown do Redator para o Conversor.",
     instructions=f"""Você tem UMA única responsabilidade: receber o texto reescrito do Redator e salvar usando a ferramenta.
 
@@ -168,6 +260,7 @@ agente_copia_cola = Agent(
     1. Receba a redação, acione a ferramenta `salvar_cv_otimizado_md` passando o texto completo.
     2. Passe no parametro da tool o nome da vaga que é {vagas_escolhidas[1]['titulo']}, depois passe o nome do arquivo salvo para que o próximo agente possa usá-lo.
     3. NÃO faça nada além disso. Zero criatividade extra. Sua missão é reescrever, não analisar ou comentar.
+    4. REGRA DE OURO: Passe somente o nome do arquivo salvo para o próximo agente, sem nenhum texto adicional. O output deve ser estritamente o nome do arquivo Markdown gerado (ex: "cv_otimizado.md").
     """,
     tools=[salvar_cv_otimizado_md]
 )
@@ -180,7 +273,7 @@ agente_copia_cola = Agent(
 # ═════════════════════════════════════════════
 agente_conversor = Agent(
     name="Conversor de CV",
-    model=MODEL_CONFIG,
+    model=MODEL_OLLAMA_QWEN2,
     description="Converte o arquivo Markdown otimizado em PDF final.",
     instructions="""Você tem UMA única responsabilidade: converter o arquivo Markdown em PDF.
 
@@ -195,6 +288,19 @@ agente_conversor = Agent(
     tools=[converter_md_para_pdf],
 )
 
+
+agente_envio = Agent(
+    name = "Agente de Envio de Candidatura",
+    model = MODEL_OLLAMA_QWEN2,
+    description = "Agente responsável por enviar o currículo otimizado para a vaga usando automação de navegador.",
+    instructions = f"""Você tem UMA única responsabilidade: enviar o currículo otimizado para a vaga usando a ferramenta de automação de navegador.
+    PASSOS OBRIGATÓRIOS:
+    1. Receba o link da vaga e o nome do arquivo PDF otimizado.
+    2. Acione IMEDIATAMENTE a ferramenta `tool_envio_candidatura` passando o link da vaga e o caminho do PDF.
+    3. Confirme a conclusão do envio.
+    """,
+    tools=[tool_envio_candidatura]
+)
 
 # ═════════════════════════════════════════════
 # ORQUESTRADOR — Pipeline sequencial
@@ -214,18 +320,18 @@ def pipeline_cv(termos_ats: str) -> str:
     """
     
     print("="*60)
-    print(f"\n[1/4] Analisando a Vaga: {termos_ats['titulo']}")
+    print(f"\n[1/5] Analisando a Vaga: {termos_ats['titulo']}")
     resultado_ats = analista_ats.run(termos_ats["descricao"])
     pprint_run_response(resultado_ats)
 
-    print("\n[2/4] Acionando o Agente Redator...")
+    print("\n[2/5] Acionando o Agente Redator...")
     # O comando inicial que dá o gatilho para a IA trabalhar sozinha
     resultado_leitura = agente_leitor.run("Leia o currículo base agora.")
     pprint_run_response(resultado_leitura)
     conteudo_base = resultado_leitura.content
 
     # ETAPA 2: Redação otimizada
-    print("\n[3/4] Reescrevendo CV para ATS...")
+    print("\n[3/5] Reescrevendo CV para ATS...")
     prompt_redacao = f"""
         CONTEÚDO_BASE:
         {conteudo_base}
@@ -243,12 +349,19 @@ def pipeline_cv(termos_ats: str) -> str:
     nome_arquivo = resultado_md.content  # ex: "cv_otimizado.md"
 
     # ETAPA 4: Conversão para PDF
-    print("\n[4/4] Convertendo para PDF...")
+    print("\n[4/5] Convertendo para PDF...")
     prompt_conversao = f"Converta o arquivo '{nome_arquivo}' para PDF agora."
     resultado_conversao = agente_conversor.run(prompt_conversao)
 
     print("\n✅ Pipeline concluído.")
-    return resultado_conversao.content
+    print(f"PDF gerado: {resultado_conversao.content}")
+
+    print("\n[5/5] Acionando o Agente de Envio...")
+    prompt_envio = f"Envie o arquivo '{resultado_conversao.content}' para a vaga {vagas_escolhidas[0]['url']}."
+    resultado_envio = agente_envio.run(prompt_envio)
+
+    print("\n✅ Pipeline concluído.")
+    return resultado_envio.content
 
 
 
