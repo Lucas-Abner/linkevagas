@@ -1,9 +1,13 @@
 from agno.agent import Agent
 from pydantic import BaseModel, Field
 from typing import List
-from agno.models.ollama import Ollama
+from agno.models.openai import OpenAIResponses
 from agno.models.message import Message
 from agno.utils.pprint import pprint_run_response
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from src.tools.playwright_tool import buscar_multiplas_vagas
 # Importando o novo arsenal de ferramentas
@@ -75,11 +79,7 @@ IDIOMAS
 ]
 
 
-MODEL_CONFIG = Ollama(
-    id="gpt-oss:20b",
-    host="http://localhost:11434",
-    options={"temperature": 0.3},  # ← reduzido para minimizar alucinação
-)
+MODEL_CONFIG = OpenAIResponses(base_url="https://api.groq.com/openai/v1", id="openai/gpt-oss-20b", api_key=os.environ.get("GROQ_API_KEY"))
 
 buscar_vagas = "Agente de IA"
 quantidade_vagas = 2 # Recomendado processar 1 por vez para não confundir o modelo local
@@ -94,7 +94,7 @@ vagas_escolhidas = buscar_multiplas_vagas(buscar_vagas, quantidade_vagas)
 
 analista_ats = Agent(
     name="Analista de ATS",
-    model=Ollama(id="qwen2.5:7b", host="http://localhost:11434"),
+    model=MODEL_CONFIG,
     description="Analisa descrições de vagas e extrai os termos essenciais.",
     instructions=f"Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. Extraia as informações de forma ATÔMICA e CURTA (máximo 3 palavras por item). Transforme exigências complexas em tags diretas. Se houver a palavra 'ou', coloque na lista de desejaveis.",
     expected_output="Gere o output estritamente preenchendo o schema de technical_terms, soft_skills e desejaveis.",
@@ -147,7 +147,7 @@ agente_redator = Agent(
        - Técnica XYZ no resumo profissional para destacar as palavras-chave.
        - Técnica XYZ na seção de habilidades técnicas para alinhar com os termos ATS.
        - Técnica XYZ nas descrições de experiência (Realizei X medido por Y fazendo Z).
-       - Títulos em UPPERCASE → converta para H3 ou H5 Markdown.
+       - Títulos em UPPERCASE → converta o Nome para H3 e o restante para Negrito Markdown.
        - Insira os termos ATS de forma natural onde houver correspondência real.
     4. REGRA DE OURO: Jamais invente ferramentas, graduações ou cargos ausentes no
        CONTEÚDO_BASE. Se precisar de seções novas, use apenas títulos genéricos como
