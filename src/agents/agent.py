@@ -7,6 +7,7 @@ from agno.models.message import Message
 from agno.utils.pprint import pprint_run_response
 import os
 from dotenv import load_dotenv
+from src.utils.format_output import extrair_bloco_markdown
 
 load_dotenv()
 
@@ -16,16 +17,17 @@ from src.tools.cv_tool import ler_cv_base_md, salvar_cv_otimizado_md, converter_
 
 support_format_cv = [
     Message(role="system", content="""
-LUCAS ABNER CAIXETA DE OLIVEIRA
+###LUCAS ABNER CAIXETA DE OLIVEIRA
 
 Campinas, SP  | lucascaixeta02@gmail.com | (11) 96013-6292 
 LinkedIn: www.linkedin.com/in/lucas-abner-caixeta/ | GitHub: github.com/lucas-abner 
 AI Engineer Júnior | IA Generativa | LLMs | Agentes (LangChain/CrewAI) | Python
 
-RESUMO PROFISSIONAL
+**RESUMO PROFISSIONAL**  
+            
 Junior AI Engineer com forte foco em Inteligência Artificial Generativa e construção de aplicações inteligentes. Experiência prática no desenvolvimento end-to-end de soluções utilizando LLMs, sistemas multi-agentes (CrewAI, LangChain) e arquiteturas RAG. Vivência no consumo e criação de APIs RESTful utilizando FastAPI, conectando modelos de IA com fluxos de back-end no mundo real. Apaixonado por explorar novos frameworks e construir assistentes que automatizam processos e executam tarefas complexas , com facilidade para leitura de documentação técnica em inglês.
 
-HABILIDADES TÉCNICAS
+**HABILIDADES TÉCNICAS**
 
     IA Generativa & LLMs: Modelos fundacionais (ChatGPT, Claude, Gemini, Ollama, Llama.cpp, MedGemma), Fine-tuning, RAG.
 
@@ -35,8 +37,9 @@ HABILIDADES TÉCNICAS
 
     Machine Learning: Scikit-learn, Pandas, NumPy, Deep Learning.
 
-EXPERIÊNCIA PROFISSIONAL
-Estagiário em Biologia Computacional | Campinas, SP Fevereiro 2025 – Atual 
+**EXPERIÊNCIA PROFISSIONAL**  
+
+Estagiário em Biologia Computacional | Campinas, SP Fevereiro 2025 – Atual
 
     Desenvolvimento de assistentes e agentes de IA utilizando Python para a automação de processos internos e execução de tarefas reais.
 
@@ -46,7 +49,8 @@ Estagiário em Biologia Computacional | Campinas, SP Fevereiro 2025 – Atual
 
     Criação de pipelines de dados e APIs escaláveis utilizando FastAPI para servir os modelos desenvolvidos.
 
-PROJETOS EM DESTAQUE
+**PROJETOS EM DESTAQUE**  
+
 Projeto Med-Crew | Análise de Imagens com Agentes * Desenvolvimento de uma aplicação em Python utilizando a arquitetura multi-agente CrewAI e o modelo MedGemma para análise inteligente de imagens de raio-X.
 
     Destaque: Participação no "The MedGemma Impact Challenge" no Kaggle, consolidando conhecimentos práticos na aplicação de LLMs open-weight de ponta.
@@ -57,12 +61,12 @@ Agente de IA para Análise de Dados e Predição | github.com/Lucas-Abner/agent_
 
     Implementação de modelos preditivos clássicos (Random Forest, Regressão Linear, Logística e SVM) integrados ao fluxo de decisão do agente de IA.
 
-FORMAÇÃO
+**FORMAÇÃO**
 
 Tecnologia em Inteligência Artificial e Machine Learning 
 UniCesumar | 2024 – Atual 
 
-CERTIFICAÇÕES
+**CERTIFICAÇÕES**
 
     LLM Engineering – Udemy 
 
@@ -70,7 +74,7 @@ CERTIFICAÇÕES
 
     Pós-treinamento de LLMs – DeepLearning.AI 
 
-IDIOMAS
+**IDIOMAS**
 
     Português: Nativo 
 
@@ -150,11 +154,11 @@ agente_redator = Agent(
        - Técnica XYZ no resumo profissional para destacar as palavras-chave.
        - Técnica XYZ na seção de habilidades técnicas para alinhar com os termos ATS.
        - Técnica XYZ nas descrições de experiência (Realizei X medido por Y fazendo Z).
-       - Títulos em UPPERCASE → converta o Nome para H3 e o restante para Negrito Markdown.
        - Insira os termos ATS de forma natural onde houver correspondência real.
     4. REGRA DE OURO: Jamais invente ferramentas, graduações ou cargos ausentes no
        CONTEÚDO_BASE. Se precisar de seções novas, use apenas títulos genéricos como
        "EXPERIÊNCIA ADICIONAL" ou "FORMAÇÃO COMPLEMENTAR".
+       Títulos em UPPERCASE → converta o Nome para H3 e o restante para Negrito Markdown.
        Não adicione mais nada além do necessário. Zero criatividade extra. Sua missão é reescrever, não analisar ou comentar.
        Escolha apenas um formato de estruturação do curriculo (ex: se escolher virgula para separar skills, mantenha esse formato para todas as skills, não misture virgula com bullet points ou outros formatos).
     """,
@@ -258,7 +262,7 @@ agente_copia_cola = Agent(
 
     PASSOS OBRIGATÓRIOS:
     1. Receba a redação, acione a ferramenta `salvar_cv_otimizado_md` passando o texto completo.
-    2. Passe no parametro da tool o nome da vaga que é {vagas_escolhidas[1]['titulo']}, depois passe o nome do arquivo salvo para que o próximo agente possa usá-lo.
+    2. Passe no parametro da tool o nome da vaga, depois passe o nome do arquivo salvo para que o próximo agente possa usá-lo.
     3. NÃO faça nada além disso. Zero criatividade extra. Sua missão é reescrever, não analisar ou comentar.
     4. REGRA DE OURO: Passe somente o nome do arquivo salvo para o próximo agente, sem nenhum texto adicional. O output deve ser estritamente o nome do arquivo Markdown gerado (ex: "cv_otimizado.md").
     """,
@@ -308,7 +312,7 @@ agente_envio = Agent(
 # como input do próximo. Sem ferramentas próprias = zero alucinação
 # de ferramenta no orquestrador.
 # ═════════════════════════════════════════════
-def pipeline_cv(termos_ats: str) -> str:
+def pipeline_cv(termos_ats: list) -> str:
     """
     Executa o pipeline completo de otimização de currículo.
 
@@ -318,50 +322,51 @@ def pipeline_cv(termos_ats: str) -> str:
     Returns:
         Confirmação do PDF gerado.
     """
-    
-    print("="*60)
-    print(f"\n[1/5] Analisando a Vaga: {termos_ats['titulo']}")
-    resultado_ats = analista_ats.run(termos_ats["descricao"])
-    pprint_run_response(resultado_ats)
 
-    print("\n[2/5] Acionando o Agente Redator...")
-    # O comando inicial que dá o gatilho para a IA trabalhar sozinha
-    resultado_leitura = agente_leitor.run("Leia o currículo base agora.")
-    pprint_run_response(resultado_leitura)
-    conteudo_base = resultado_leitura.content
+    for _, termo in enumerate(termos_ats):
+        print("="*60)
+        print(f"\n[1/5] Analisando a Vaga: {termo['titulo']}")
+        resultado_ats = analista_ats.run(termo["descricao"])
+        pprint_run_response(resultado_ats)
 
-    # ETAPA 2: Redação otimizada
-    print("\n[3/5] Reescrevendo CV para ATS...")
-    prompt_redacao = f"""
-        CONTEÚDO_BASE:
-        {conteudo_base}
+        print("\n[2/5] Acionando o Agente Redator...")
+        # O comando inicial que dá o gatilho para a IA trabalhar sozinha
+        resultado_leitura = agente_leitor.run("Leia o currículo base agora.")
+        pprint_run_response(resultado_leitura)
+        conteudo_base = resultado_leitura.content
 
-        TERMOS_ATS:
-        {resultado_ats.content}
+        # ETAPA 2: Redação otimizada
+        print("\n[3/5] Reescrevendo CV para ATS...")
+        prompt_redacao = f"""
+            CONTEÚDO_BASE:
+            {conteudo_base}
 
-        Reescreva o currículo seguindo suas instruções e salve o arquivo.
-        """
-    resultado_redacao = agente_redator.run(prompt_redacao)
-    pprint_run_response(resultado_redacao)
+            TERMOS_ATS:
+            {resultado_ats.content}
 
-    resultado_md = agente_copia_cola.run(resultado_redacao.content)
-    pprint_run_response(resultado_md)
-    nome_arquivo = resultado_md.content  # ex: "cv_otimizado.md"
+            Reescreva o currículo seguindo suas instruções e salve o arquivo.
+            """
+        resultado_redacao = agente_redator.run(prompt_redacao)  
+        redacao = extrair_bloco_markdown(resultado_redacao.content)  # Limpa o output para pegar só o markdown
+        pprint_run_response(redacao)
 
-    # ETAPA 4: Conversão para PDF
-    print("\n[4/5] Convertendo para PDF...")
-    prompt_conversao = f"Converta o arquivo '{nome_arquivo}' para PDF agora."
-    resultado_conversao = agente_conversor.run(prompt_conversao)
+        resultado_md = agente_copia_cola.run(f"Pegue o nome da vaga {termo['titulo']} e o conteúdo {redacao}")
+        pprint_run_response(resultado_md)
+        nome_arquivo = resultado_md.content  # ex: "cv_otimizado.md"
+
+        # ETAPA 4: Conversão para PDF
+        print("\n[4/5] Convertendo para PDF...")
+        prompt_conversao = f"Converta o arquivo '{nome_arquivo}' para PDF agora."
+        resultado_conversao = agente_conversor.run(prompt_conversao)
+
+        print("\n✅ Pipeline concluído.")
+        print(f"PDF gerado: {resultado_conversao.content}")
+
+        print("\n[5/5] Acionando o Agente de Envio...")
+        prompt_envio = f"Envie o arquivo '{resultado_conversao.content}' para a vaga {termo['url']}."
+        agente_envio.run(prompt_envio)
 
     print("\n✅ Pipeline concluído.")
-    print(f"PDF gerado: {resultado_conversao.content}")
-
-    print("\n[5/5] Acionando o Agente de Envio...")
-    prompt_envio = f"Envie o arquivo '{resultado_conversao.content}' para a vaga {vagas_escolhidas[0]['url']}."
-    resultado_envio = agente_envio.run(prompt_envio)
-
-    print("\n✅ Pipeline concluído.")
-    return resultado_envio.content
 
 
 
@@ -370,5 +375,5 @@ def pipeline_cv(termos_ats: str) -> str:
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
     print("Iniciando o pipeline de otimização de currículo...\n")
-    print(f"Vaga escolhida para otimização: {vagas_escolhidas[1]['titulo']}\n{vagas_escolhidas[1]['descricao']}")
-    pipeline_cv(termos_ats=vagas_escolhidas[1])
+    # print(f"Vaga escolhida para otimização: {vagas_escolhidas[-1]['titulo']}\n{vagas_escolhidas[-1]['descricao']}")
+    pipeline_cv(termos_ats=vagas_escolhidas)

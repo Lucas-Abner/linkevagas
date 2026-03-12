@@ -42,6 +42,17 @@ def gerar_sessao_linkedin():
         browser.close()
 
 def buscar_multiplas_vagas(termo_pesquisa: str, quantidade_vagas=1):
+    """
+    Ferramenta para a IA buscar múltiplas vagas no LinkedIn com base em um termo de pesquisa, utilizando a sessão autenticada previamente salva. A IA deve ser capaz de extrair o título, descrição e URL de cada vaga encontrada, garantindo que as informações sejam relevantes e atualizadas.
+
+        1. A IA deve navegar até a página de busca de vagas do LinkedIn utilizando o termo de pesquisa fornecido.
+        2. Extrair o título, descrição e URL das vagas listadas na página de resultados.
+        3. Armazenar as informações extraídas em uma estrutura organizada (ex: lista de dicionários).
+        4. Retornar as informações das vagas encontradas para uso posterior no processo de otimização e candidatura.
+
+        Observação: A IA deve ser capaz de lidar com variações na estrutura das páginas de resultados do LinkedIn, garantindo que a extração das informações seja realizada de forma robusta e eficiente.
+    """
+
     # Verifica sessão ANTES de abrir o browser
     if not sessao_esta_valida():
         print("⚠️  Sessão inválida. Iniciando autenticação...")
@@ -94,14 +105,19 @@ def buscar_multiplas_vagas(termo_pesquisa: str, quantidade_vagas=1):
         total_vagas = page.locator(seletor_ativo).count()
 
         quantidade_encontradas = min(quantidade_vagas, total_vagas)
+
+        print(f"Total da contagem: {quantidade_encontradas}")
         print(f"Encontradas {total_vagas} vagas. Extraindo as {quantidade_encontradas} primeiras...")
 
-        for i in range(quantidade_encontradas):
+        indice_atual = 0
+
+        while len(caixa_vagas) < quantidade_encontradas and indice_atual < total_vagas:
+
             page.wait_for_selector(seletor_ativo)
             page.wait_for_timeout(500)
 
             cards = page.locator(seletor_ativo)
-            card = cards.nth(i)
+            card = cards.nth(indice_atual)
 
             try:
                 card.scroll_into_view_if_needed(timeout=5000)
@@ -109,10 +125,18 @@ def buscar_multiplas_vagas(termo_pesquisa: str, quantidade_vagas=1):
                 # Se o elemento não estiver disponível, espera mais e tenta novamente
                 page.wait_for_timeout(1000)
                 cards = page.locator(seletor_ativo)
-                card = cards.nth(i)
+                card = cards.nth(indice_atual)
                 card.scroll_into_view_if_needed(timeout=5000)
 
             card.click()
+            page.wait_for_timeout(2000)
+
+            try:
+                page.wait_for_selector(".jobs-apply-button--top-card", timeout=5000)
+            except Exception:
+                print("Botão de candidatura não encontrado. Pular para proxima vaga.")
+                indice_atual += 1
+                continue
 
             url_vaga = page.url
 
@@ -131,7 +155,9 @@ def buscar_multiplas_vagas(termo_pesquisa: str, quantidade_vagas=1):
                 "url": url_vaga
             })
 
-            print(f"Vaga {i+1} extraída: {titulo}")
+            print(f"Vaga {indice_atual+1} extraída: {titulo}\nURL: {url_vaga}\n{'-'*40}")
+
+            indice_atual += 1
 
         browser.close()
     return caixa_vagas
@@ -170,6 +196,19 @@ def preencher_perguntas_adicionais(modal, page):
         "clt":                      "Yes",
         "aceita":                   "Yes",
         "accept":                   "Yes",
+        "reside":                   "Yes",
+        "llm":                      "1",
+        "código do país":           "55" or "+55" or "Brasil",
+        "country code":             "55",
+        "e-mail":                   "lucascaixeta02@gmail.com",
+        "english":                  "1" or "Yes",
+        "inglês":                   "1" or "Yes",
+        "artificial intelligence":  "1",
+        "inteligência artificial":  "1",
+        "ia":                       "1",
+        "agentes ia":               "1",
+        "disponibilidade para início":"Imediata",
+        "linkedin":                 "https://www.linkedin.com/in/lucas-abner-caixeta-oliveira",
     }
 
     page.wait_for_timeout(1000)
@@ -231,129 +270,147 @@ def preencher_perguntas_adicionais(modal, page):
 
 
 
-def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
+def detectar_e_preencher_tela(modal, page, nome_cv: str) -> str:
     """
-    Ferramenta para a IA realizar o envio de candidatura diretamente pelo LinkedIn, utilizando a sessão autenticada previamente salva. A IA deve ser capaz de preencher os campos necessários e anexar o currículo otimizado gerado, garantindo uma aplicação eficiente e personalizada para cada vaga.
-
-        1. A IA deve navegar até a página da vaga específica no LinkedIn.
-        2. Identificar e clicar no botão "Candidatar-se" ou equivalente.
-        3. Preencher os campos obrigatórios do formulário de candidatura, como nome, email, telefone, etc.
-        4. Anexar o currículo otimizado gerado anteriormente.
-        5. Revisar as informações preenchidas e enviar a candidatura.
-        6. Confirmar o envio e registrar o status da candidatura para acompanhamento futuro.
-    
-        Observação: A IA deve ser capaz de lidar com variações na estrutura das páginas de vagas do LinkedIn, garantindo que o processo de candidatura seja realizado de forma robusta e eficiente.
+    Detecta o conteúdo da tela atual do Easy Apply e preenche os campos.
+    Retorna o tipo de tela detectada.
     """
+    page.wait_for_timeout(1000)
 
-    with sync_playwright() as p:
-
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context(storage_state="linkedin_session.json")
-        page = context.new_page()
-
-        page.goto(url_vaga)
-
-        page.wait_for_selector(".jobs-apply-button--top-card")
-
-        print("Botão de candidatura encontrado. Iniciando processo de candidatura...")
-
-        page.click(".jobs-apply-button--top-card")
-
-        # Aguarda o modal Easy Apply abrir
-        page.wait_for_selector(".jobs-easy-apply-modal", timeout=10000)
-        print("Modal Easy Apply aberto!")
-
-        # Escopa todos os locators DENTRO do modal
-        modal = page.locator(".jobs-easy-apply-modal")
-
-        page.wait_for_timeout(1000)
-
-        # Preenche os campos dentro do modal
-        first_name = modal.get_by_label("First name")
-        if first_name.is_visible():
-            first_name.fill("Lucas Abner")
-
+    # ── Tela de informações de contato (nome, email, localização) ──
+    first_name = modal.get_by_label("First name")
+    if first_name.count() > 0 and first_name.is_visible():
+        first_name.fill("Lucas Abner")
+        
         last_name = modal.get_by_label("Last name")
-        if last_name.is_visible():
+        if last_name.count() > 0 and last_name.is_visible():
             last_name.fill("Caixeta de Oliveira")
 
         email = modal.get_by_label("Email address")
-        if email.is_visible():
-            email.select_option(value="lucascaixeta02@gmail.com")
+        if email.count() > 0 and email.is_visible():
+            try:
+                email.select_option(value="lucascaixeta02@gmail.com")
+            except Exception:
+                pass  # Já preenchido ou campo de texto
 
         loc_input = modal.get_by_label("Location (city)")
-        if loc_input.is_visible():
+        if loc_input.count() > 0 and loc_input.is_visible():
             loc_input.click()
             loc_input.fill("Campinas")
             page.wait_for_timeout(500)
             loc_input.press("ArrowDown")
             loc_input.press("Enter")
 
-        botao_avancar = modal.locator("button[data-easy-apply-next-button]")
-        if botao_avancar.is_visible():
-            botao_avancar.click()
+        return "contato"
 
-        print("Primeira tela de contato preenchida e avançada!")
+    # ── Tela de telefone ──
+    telefone = modal.get_by_label("Phone number")
+    if telefone.count() > 0 and telefone.is_visible():
+        telefone.fill("11960136292")
 
-        # Preenche a segunda tela de contato
-        page.wait_for_selector(".jobs-easy-apply-modal", timeout=10000)
-        modal = page.locator(".jobs-easy-apply-modal")
+        codigo_pais = modal.get_by_label("Phone country code")
+        if codigo_pais.count() > 0 and codigo_pais.is_visible():
+            try:
+                codigo_pais.select_option(label="Brazil (+55)")
+            except Exception:
+                pass
 
-        telefone = modal.get_by_label("Phone number")
-        if telefone.is_visible():
-            telefone.fill("(11) 96013-6292")
+        return "telefone"
 
-        botao_avancar = modal.locator("button[data-easy-apply-next-button]")
-        if botao_avancar.is_visible():
-            botao_avancar.click()
-
-
-        print("Segunda tela de contato preenchida e avançada!")
-
-        # Preenche a terceira tela de contato
-        page.wait_for_selector(".jobs-easy-apply-modal", timeout=10000)
-        modal = page.locator(".jobs-easy-apply-modal")
-
+    # ── Tela de upload de CV ──
+    upload_input = modal.locator("input[type='file']")
+    if upload_input.count() > 0:
         caminho_path = Path(__file__).parent.parent.parent / f"{nome_cv}"
+        upload_input.set_input_files(str(caminho_path))
+        print(f"✅ CV anexado: {caminho_path}")
+        return "cv_upload"
 
-        # caminho_path = "/home/lucas.abner/Documentos/code/linkevagas/Lucas_Abner_Caixeta_CV_AI_Engineer_Jr.pdf"
-
-        curriculo = modal.get_by_label("Resume")
-        if curriculo.is_visible():
-            curriculo.set_input_files(caminho_path)
-
-        botao_enviar = modal.locator("button[data-easy-apply-submit-button]")
-        if botao_enviar.is_visible():
-            botao_enviar.click()
-
-        page.wait_for_selector(".jobs-easy-apply-modal", timeout=10000)
-        modal = page.locator(".jobs-easy-apply-modal")
-        page.wait_for_timeout(1000)
-
+    # ── Tela de perguntas adicionais ──
+    inputs_adicionais = modal.locator("input.artdeco-text-input--input")
+    selects_adicionais = modal.locator("select[data-test-text-entity-list-form-select]")
+    if inputs_adicionais.count() > 0 or selects_adicionais.count() > 0:
         preencher_perguntas_adicionais(modal, page)
+        return "perguntas"
 
-        # Clica em "Revisar" ou "Avançar"
-        botao_revisar = modal.locator("button[data-live-test-easy-apply-review-button]")
-        botao_avancar = modal.locator("button[data-easy-apply-next-button]")
+    return "desconhecida"
 
-        if botao_revisar.is_visible():
-            botao_revisar.click()
-            print("✅ Clicou em Revisar!")
-        elif botao_avancar.is_visible():
-            botao_avancar.click()
-            print("✅ Avançou para próxima etapa!")
 
-        page.wait_for_timeout(1500)
+def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
+    """
+    Ferramenta para a IA realizar o envio de candidatura diretamente pelo LinkedIn,
+    utilizando a sessão autenticada previamente salva.
+    """
+    if not sessao_esta_valida():
+        print("⚠️  Sessão inválida. Iniciando autenticação...")
+        gerar_sessao_linkedin()
 
-        # ── Tela de revisão final → Enviar ──
-        botao_enviar = page.locator("button[data-live-test-easy-apply-submit-button]")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        context = browser.new_context(storage_state="linkedin_session.json")
+        page = context.new_page()
 
-        if botao_enviar.is_visible():
-            botao_enviar.click()
-            print("✅ Candidatura enviada com sucesso!")
-            return f"Candidatura enviada para: {nome_cv.replace('.pdf', '').replace('_', ' ')}"
+        page.goto(url_vaga)
+        page.wait_for_selector(".jobs-apply-button--top-card", timeout=15000)
+        print("Botão de candidatura encontrado. Iniciando processo...")
 
-        return "⚠️ Botão de envio não encontrado. Verifique manualmente."
+        page.click(".jobs-apply-button--top-card")
+        page.wait_for_selector(".jobs-easy-apply-modal", timeout=10000)
+        print("Modal Easy Apply aberto!")
+
+        MAX_TELAS = 10  # Limite de segurança para não entrar em loop infinito
+
+        for tela_num in range(1, MAX_TELAS + 1):
+            modal = page.locator(".jobs-easy-apply-modal")
+            page.wait_for_timeout(1000)
+
+            # ── Verifica se é a tela final (botão Enviar/Submit) ──
+            botao_enviar = modal.locator("button[aria-label='Enviar candidatura']")
+            botao_enviar_alt = modal.locator("button[aria-label='Submit application']")
+            botao_enviar_data = modal.locator("button[data-easy-apply-submit-button]")
+
+            for btn in [botao_enviar, botao_enviar_alt, botao_enviar_data]:
+                if btn.count() > 0 and btn.is_visible():
+                    btn.click()
+                    print(f"✅ Candidatura enviada com sucesso na tela {tela_num}!")
+                    page.wait_for_timeout(2000)
+                    browser.close()
+                    return f"Candidatura enviada para: {nome_cv.replace('.pdf', '').replace('_', ' ')}"
+
+            # ── Detecta e preenche a tela atual ──
+            tipo_tela = detectar_e_preencher_tela(modal, page, nome_cv)
+            print(f"📄 Tela {tela_num}: {tipo_tela}")
+
+            page.wait_for_timeout(500)
+
+            # ── Tenta avançar: Revisar > Avançar > Enviar ──
+            botao_revisar = modal.locator("button:has-text('Revisar'), button:has-text('Review')")
+            botao_avancar = modal.locator("button[data-easy-apply-next-button]")
+
+            if botao_revisar.count() > 0 and botao_revisar.is_visible():
+                botao_revisar.click()
+                print(f"  ➡️ Clicou em Revisar")
+            elif botao_avancar.count() > 0 and botao_avancar.is_visible():
+                botao_avancar.click()
+                print(f"  ➡️ Avançou para próxima tela")
+            else:
+                print(f"  ⚠️ Nenhum botão de avanço encontrado na tela {tela_num}")
+                page.screenshot(path=f"debug_tela_{tela_num}.png")
+                # Tenta clicar em qualquer botão primário visível como fallback
+                botao_generico = modal.locator("button.artdeco-button--primary")
+                if botao_generico.count() > 0 and botao_generico.first.is_visible():
+                    botao_generico.first.click()
+                    print(f"  ➡️ Clicou no botão primário genérico")
+                else:
+                    break
+
+            page.wait_for_timeout(1500)
+
+        # Se saiu do loop sem enviar
+        print("⚠️ Limite de telas atingido. Pausando para verificação manual.")
+        page.pause()
+        browser.close()
+        return "⚠️ Candidatura não foi enviada automaticamente. Verifique manualmente."
+
 
 # if __name__ == "__main__":
 #     # caixa = buscar_multiplas_vagas("Desenvolvedor Python", 1)
@@ -362,3 +419,5 @@ def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
 #     r = tool_envio_candidatura("https://www.linkedin.com/jobs/search/?currentJobId=4381833617&keywords=Desenvolvedor%20Python", "/home/lucas.abner/Documentos/code/linkevagas/Lucas_Abner_Caixeta_CV_AI_Engineer_Jr.pdf")
 
 #     print(r)
+
+    # gerar_sessao_linkedin()

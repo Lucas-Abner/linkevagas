@@ -149,7 +149,7 @@ venv.bak/
 *.docx
 *.doc
 *.md
-*.json
+**.json
 
 # Spyder project settings
 .spyderproject
