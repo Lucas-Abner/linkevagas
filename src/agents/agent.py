@@ -114,7 +114,7 @@ analista_ats = Agent(
 # ═════════════════════════════════════════════
 agente_leitor = Agent(
     name="Leitor de CV",
-    model=MODEL_OLLAMA_QWEN3,
+    model=MODEL_OLLAMA_QWEN2,
     description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
     instructions="""Você tem UMA única responsabilidade: recuperar o conteúdo do currículo base.
 
@@ -137,7 +137,7 @@ agente_leitor = Agent(
 # ═════════════════════════════════════════════
 agente_redator = Agent(
     name="Redator de CV",
-    model=MODEL_OLLAMA_QWEN3,
+    model=MODEL_OLLAMA_QWEN2,
     description="Reescreve o currículo em Markdown otimizado para ATS e salva o arquivo.",
     instructions=f"""Você recebe dois insumos via prompt:
     - CONTEÚDO_BASE: o currículo original do candidato (fornecido pelo Leitor de CV).
@@ -252,7 +252,7 @@ agente_redator = Agent(
 
 agente_copia_cola = Agent(
     name="Copia e Cola",
-    model=MODEL_OLLAMA_QWEN2,
+    model=MODEL_OLLAMA_QWEN3,
     description="Agente intermediário para passar o nome do arquivo Markdown do Redator para o Conversor.",
     instructions=f"""Você tem UMA única responsabilidade: receber o texto reescrito do Redator e salvar usando a ferramenta.
 
