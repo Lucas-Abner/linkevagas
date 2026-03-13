@@ -31,7 +31,7 @@ def ler_cv_base_md() -> str:
     """
     md = MarkItDown()
     pdf_path = "/home/lucas.abner/Documentos/code/linkevagas/Lucas_Abner_Caixeta_CV_AI_Engineer_Jr.pdf"
-    pdf_path2 = "C:\\Users\\asus\\Documents\\IA\\linkevagas\\Lucas_Abner_Caixeta_CV_AI_Engineer_Jr.pdf"
+    pdf_path2 = "C:\\Users\\lucas\\Documents\\code_path\\linkevagas\\Lucas_Abner_Engineer.pdf"
     pdf_md = md.convert(pdf_path) if os.path.exists(pdf_path) else md.convert(pdf_path2)
 
     conteudo_cv = pdf_md.text_content
