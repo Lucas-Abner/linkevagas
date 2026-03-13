@@ -83,8 +83,6 @@ UniCesumar | 2024 – Atual
     )
 ]
 
-
-MODEL_CONFIG = OpenAIResponses(base_url="https://api.groq.com/openai/v1", id="qwen/qwen3-32b", api_key=os.environ.get("GROQ_API_KEY"))
 MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
 MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:9b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
 
@@ -110,7 +108,6 @@ analista_ats = Agent(
 
 # O Redator perde o schema e ganha as TOOLS para ter total liberdade de reescrita
 
-
 # ═════════════════════════════════════════════
 # AGENTE 1 — LEITOR
 # Responsabilidade única: ler o CV base e retornar o conteúdo bruto.
@@ -131,7 +128,6 @@ agente_leitor = Agent(
     """,
     tools=[ler_cv_base_md],
 )
-
 
 # ═════════════════════════════════════════════
 # AGENTE 2 — REDATOR
@@ -154,6 +150,7 @@ agente_redator = Agent(
        - Técnica XYZ no resumo profissional para destacar as palavras-chave.
        - Técnica XYZ na seção de habilidades técnicas para alinhar com os termos ATS.
        - Técnica XYZ nas descrições de experiência (Realizei X medido por Y fazendo Z).
+       - Técnica XYZ para destacar projetos relevantes.
        - Insira os termos ATS de forma natural onde houver correspondência real.
     4. REGRA DE OURO: Jamais invente ferramentas, graduações ou cargos ausentes no
        CONTEÚDO_BASE. Se precisar de seções novas, use apenas títulos genéricos como
@@ -165,94 +162,6 @@ agente_redator = Agent(
     additional_input=support_format_cv,
     # tools=[salvar_cv_otimizado_md],
 )
-
-
-
-# agente_redator = Agent(
-#     name="Redator de CV",
-#     model=MODEL_OLLAMA_QWEN2,
-#     description="Reescreve currículo em Markdown otimizado para ATS.",
-#     instructions=f"""
-# Você recebe:
-
-# CONTEÚDO_BASE → currículo original do candidato  
-# TERMOS_ATS → palavras-chave da vaga
-
-# OBJETIVO:
-# Reescrever o currículo para melhorar compatibilidade com ATS.
-
-# REGRAS:
-
-# 1. CONTEÚDO_BASE é a única fonte de verdade.
-# 2. Nunca invente experiências, ferramentas, cargos ou formação.
-# 3. Use TERMOS_ATS apenas se forem compatíveis com o histórico real.
-
-# ESTRUTURA DO CURRÍCULO:
-
-# ### Nome
-
-# **Localização | Email | Telefone**  
-# **GitHub | LinkedIn**
-
-# **Resumo Profissional**
-# Parágrafo curto destacando:
-# - área de atuação
-# - principais tecnologias
-# - palavras-chave relevantes
-
-# **Habilidades Técnicas**
-
-# Formato obrigatório:
-
-# Categoria: tecnologia, tecnologia, tecnologia
-
-# Exemplo:
-# Linguagens: Python, SQL  
-# Frameworks: FastAPI, LangChain  
-# IA: LLMs, RAG, Machine Learning
-
-# **Experiência Profissional**
-
-# Cargo – Empresa | Local | Período
-
-# Bullets devem seguir:
-
-# Ação + tecnologia + aplicação
-
-# Exemplo:
-# - Desenvolveu agentes de IA com CrewAI para automação de processos.
-# - Implementou APIs REST com FastAPI para disponibilizar modelos de ML.
-# - Implantou LLMs locais com Ollama em ambiente HPC.
-
-# **Projetos**
-# Descrição + tecnologias usadas.
-
-# **Formação**
-
-# Curso – Instituição | Ano
-
-# **Certificações**
-
-# Lista simples.
-
-# REGRAS ATS:
-
-# - Use linguagem simples
-# - repita palavras-chave relevantes
-# - evite tabelas, colunas ou emojis
-# - mantenha estrutura consistente
-
-# SAÍDA:
-
-# Retorne apenas o currículo reescrito em Markdown.
-# Não explique nada.
-# """,
-#     additional_input=support_format_cv,
-# )
-
-
-
-
 
 agente_copia_cola = Agent(
     name="Copia e Cola",
@@ -268,7 +177,6 @@ agente_copia_cola = Agent(
     """,
     tools=[salvar_cv_otimizado_md]
 )
-
 
 # ═════════════════════════════════════════════
 # AGENTE 3 — CONVERSOR
@@ -291,7 +199,6 @@ agente_conversor = Agent(
     """,
     tools=[converter_md_para_pdf],
 )
-
 
 agente_envio = Agent(
     name = "Agente de Envio de Candidatura",
@@ -367,8 +274,6 @@ def pipeline_cv(termos_ats: list) -> str:
         agente_envio.run(prompt_envio)
 
     print("\n✅ Pipeline concluído.")
-
-
 
 # ─────────────────────────────────────────────
 # EXECUÇÃO

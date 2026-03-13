@@ -7,7 +7,11 @@ requires-python = ">=3.12"
 packages = [{include = "src"}]
 dependencies = [
     "agno>=2.5.8",
+    "google-genai>=1.67.0",
     "ipython>=9.11.0",
+    "langchain>=1.2.12",
+    "langchain-community>=0.4.1",
+    "langchain-openai>=1.1.11",
     "markdown-pdf>=1.13.1",
     "markitdown[all]>=0.1.5",
     "ollama>=0.6.1",

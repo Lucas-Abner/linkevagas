@@ -1,4 +1,7 @@
 from playwright.sync_api import sync_playwright
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_openai import ChatOpenAI
 import json
 import time
 import os
@@ -162,20 +165,6 @@ def buscar_multiplas_vagas(termo_pesquisa: str, quantidade_vagas=1):
         browser.close()
     return caixa_vagas
 
-
-# def busca_vagas_tool() -> List:
-#     try:
-#         vagas = buscar_multiplas_vagas("Desenvolvedor Python", 5)
-#         for vaga in vagas:
-#             print(f"Titulo: {vaga['titulo']}\nDescrição: {vaga['descricao']}\n{'-'*40}")
-#     except FileNotFoundError:
-#         print("Sessão do LinkedIn não encontrada. Por favor, execute 'gerar_sessao_linkedin()' primeiro para criar a sessão.")
-#         gerar_sessao_linkedin()
-#         vagas = buscar_multiplas_vagas("Desenvolvedor Python", 10)
-#         for vaga in vagas:
-#             print(f"Titulo: {vaga['titulo']}\nDescrição: {vaga['descricao']}\n{'-'*40}")
-
-
 def preencher_perguntas_adicionais(modal, page):
     """
     Preenche dinamicamente as perguntas adicionais do Easy Apply.
@@ -190,25 +179,22 @@ def preencher_perguntas_adicionais(modal, page):
         "fastapi":                  "1",
         "machine learning":         "1",
         "deep learning":            "1",
-        "salary":                   "4000",
-        "salário":                  "4000",
-        "reals":                    "4000",
         "clt":                      "Yes",
         "aceita":                   "Yes",
         "accept":                   "Yes",
         "reside":                   "Yes",
         "llm":                      "1",
-        "código do país":           "55" or "+55" or "Brasil",
-        "country code":             "55",
         "e-mail":                   "lucascaixeta02@gmail.com",
-        "english":                  "1" or "Yes",
-        "inglês":                   "1" or "Yes",
+        "english":                  "1",
+        "inglês":                   "1",
         "artificial intelligence":  "1",
         "inteligência artificial":  "1",
         "ia":                       "1",
         "agentes ia":               "1",
         "disponibilidade para início":"Imediata",
         "linkedin":                 "https://www.linkedin.com/in/lucas-abner-caixeta-oliveira",
+        "nome completo":            "Lucas Abner Caixeta de Oliveira",
+        "telefone":                 "11960136292"
     }
 
     page.wait_for_timeout(1000)
@@ -240,6 +226,8 @@ def preencher_perguntas_adicionais(modal, page):
             print(f"  ✅ Preenchido com: {valor}")
         else:
             print(f"  ⚠️  Sem resposta mapeada para: {label_text[:60]}")
+            resposta = resposta_pergunta_llm(label_text, respostas)
+            inp.fill(resposta)
 
     # Preenche selects (dropdowns)
     selects = modal.locator("select[data-test-text-entity-list-form-select]")
@@ -255,6 +243,10 @@ def preencher_perguntas_adicionais(modal, page):
 
         label_text = label.inner_text().strip().lower()
         print(f"  Dropdown encontrado: {label_text[:60]}...")
+        page.wait_for_timeout(500)
+
+        opcoes_disponiveis = sel.locator("option")
+        opcoes_disponiveis = [op.strip() for op in opcoes_disponiveis.all_inner_texts()]
 
         valor = None
         for chave, resposta in respostas.items():
@@ -262,13 +254,47 @@ def preencher_perguntas_adicionais(modal, page):
                 valor = resposta
                 break
 
+        if not valor:
+            contexto = f"Pergunta: {label_text}\nOpções disponíveis: {opcoes_disponiveis}\nEscolha APENAS uma das opções acima, exatamente como escrita."
+            valor = resposta_pergunta_llm(contexto, respostas)
+            print(f"  LLM sugeriu: {valor}")
+
+        opcao_escolhida = None
+        for op in opcoes_disponiveis:
+            if valor.lower() in op.lower():
+                opcao_escolhida = op
+                break
+
         if valor:
-            sel.select_option(label=valor)
+            sel.select_option(label=opcao_escolhida)
             print(f"  ✅ Selecionado: {valor}")
         else:
             print(f"  ⚠️  Sem resposta mapeada para dropdown: {label_text[:60]}")
+            sel.select_option(label=opcoes_disponiveis[0])  # Seleciona a primeira opção como fallback
+            print(f"  ⚠️ Fallback: selecionado primeira opção: {opcoes_disponiveis[0]}")
+
+def resposta_pergunta_llm(label_text: str, respostas: dict) -> str:
+    """
+    Chama a LLM para obter uma resposta para uma pergunta adicional do Easy Apply, com base no texto do label.
+    """
+
+    chat = ChatOpenAI(
+        api_key=os.environ.get("OPENAI_API_KEY", "GROQ_API_KEY_REMOVED"),
+        base_url="https://api.groq.com/openai/v1",
+        model="openai/gpt-oss-20b",
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "Você é um assistente especializado em preencher formulários de candidatura do LinkedIn. Com base no texto da pergunta, forneça a resposta mais adequada e concisa possível. Use as seguintes dicas para interpretar as perguntas:\n\n- Se a pergunta mencionar habilidades técnicas (ex: Python, Machine Learning), responda com o nível de experiência (0-5) ou 'Yes' se for uma pergunta de checkbox.\n- Se a pergunta for sobre salário, forneça um valor realista baseado no mercado para um cargo de AI Engineer Jr no Brasil e SOMENTE números.\n- Se a pergunta for sobre disponibilidade ou localização, responda com informações reais (ex: 'Imediata', 'Campinas').\n- Se a pergunta for sobre aceitar termos ou residir em determinado local, responda com 'Yes' ou 'No' conforme apropriado.\nSe perguntar o genero, sempre responda masculino\n- Para perguntas que não se encaixem nas categorias acima, use seu conhecimento geral para inferir a resposta mais provável\nSe a mensagem for dropdown, responda apenas com a opção exata a ser selecionada, sem explicações ou texto adicional.\nREGRA DE OURO: Tudo que exige números, responda somente com números. Para perguntas de checkbox, responda apenas 'Yes' ou 'No'. Evite qualquer texto explicativo ou adicional. Responda apenas o valor a ser preenchido no formulário.\nPegue essa lista pré-existente de respostas: {respostas}\nUse essa lista para responder perguntas semelhantes, mas se a pergunta for diferente, use seu conhecimento para inferir a resposta correta. Seja conciso e direto ao ponto."),
+        ("human", "{pergunta}")]
+    )
+
+    chain = prompt | chat
+
+    resposta = chain.invoke({"pergunta": label_text, "respostas": respostas})
 
 
+    return resposta.content if hasattr(resposta, "content") else str(resposta) 
 
 def detectar_e_preencher_tela(modal, page, nome_cv: str) -> str:
     """
@@ -278,44 +304,37 @@ def detectar_e_preencher_tela(modal, page, nome_cv: str) -> str:
     page.wait_for_timeout(1000)
 
     # ── Tela de informações de contato (nome, email, localização) ──
-    first_name = modal.get_by_label("First name")
-    if first_name.count() > 0 and first_name.is_visible():
-        first_name.fill("Lucas Abner")
+    # first_name = modal.get_by_label("First name")
+    # if first_name.count() > 0 and first_name.is_visible():
+    #     first_name.fill("Lucas Abner")
         
-        last_name = modal.get_by_label("Last name")
-        if last_name.count() > 0 and last_name.is_visible():
-            last_name.fill("Caixeta de Oliveira")
+    #     last_name = modal.get_by_label("Last name")
+    #     if last_name.count() > 0 and last_name.is_visible():
+    #         last_name.fill("Caixeta de Oliveira")
 
-        email = modal.get_by_label("Email address")
-        if email.count() > 0 and email.is_visible():
-            try:
-                email.select_option(value="lucascaixeta02@gmail.com")
-            except Exception:
-                pass  # Já preenchido ou campo de texto
+    #     email = modal.get_by_label("Email address")
+    #     if email.count() > 0 and email.is_visible():
+    #         try:
+    #             email.select_option(value="lucascaixeta02@gmail.com")
+    #         except Exception:
+    #             pass  # Já preenchido ou campo de texto
 
-        loc_input = modal.get_by_label("Location (city)")
-        if loc_input.count() > 0 and loc_input.is_visible():
-            loc_input.click()
-            loc_input.fill("Campinas")
-            page.wait_for_timeout(500)
-            loc_input.press("ArrowDown")
-            loc_input.press("Enter")
+    #     loc_input = modal.get_by_label("Location (city)")
+    #     if loc_input.count() > 0 and loc_input.is_visible():
+    #         loc_input.click()
+    #         loc_input.fill("Campinas")
+    #         page.wait_for_timeout(500)
+    #         loc_input.press("ArrowDown")
+    #         loc_input.press("Enter")
 
-        return "contato"
+    #     return "contato"
 
     # ── Tela de telefone ──
     telefone = modal.get_by_label("Phone number")
     if telefone.count() > 0 and telefone.is_visible():
         telefone.fill("11960136292")
-
-        codigo_pais = modal.get_by_label("Phone country code")
-        if codigo_pais.count() > 0 and codigo_pais.is_visible():
-            try:
-                codigo_pais.select_option(label="Brazil (+55)")
-            except Exception:
-                pass
-
-        return "telefone"
+        print("✅ Telefone preenchido")
+        
 
     # ── Tela de upload de CV ──
     upload_input = modal.locator("input[type='file']")
@@ -333,7 +352,6 @@ def detectar_e_preencher_tela(modal, page, nome_cv: str) -> str:
         return "perguntas"
 
     return "desconhecida"
-
 
 def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
     """
@@ -410,13 +428,15 @@ def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
         browser.close()
         return "⚠️ Candidatura não foi enviada automaticamente. Verifique manualmente."
 
-
-# if __name__ == "__main__":
+if __name__ == "__main__":
 #     # caixa = buscar_multiplas_vagas("Desenvolvedor Python", 1)
 #     # print(caixa[0]["titulo"][:500].replace(" ", "_").lower())
 
-#     r = tool_envio_candidatura("https://www.linkedin.com/jobs/search/?currentJobId=4381833617&keywords=Desenvolvedor%20Python", "/home/lucas.abner/Documentos/code/linkevagas/Lucas_Abner_Caixeta_CV_AI_Engineer_Jr.pdf")
+#     # r = tool_envio_candidatura("https://www.linkedin.com/jobs/search/?currentJobId=4381833617&keywords=Desenvolvedor%20Python", "/home/lucas.abner/Documentos/code/linkevagas/Lucas_Abner_Caixeta_CV_AI_Engineer_Jr.pdf")
 
-#     print(r)
+#     # print(r)
 
-    # gerar_sessao_linkedin()
+#     gerar_sessao_linkedin()
+
+    r = resposta_pergunta_llm()
+    print(f"Resposta da LLM para a pergunta: {r}")
