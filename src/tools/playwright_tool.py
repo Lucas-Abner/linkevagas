@@ -407,7 +407,6 @@ def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
 
         # Se saiu do loop sem enviar
         print("⚠️ Limite de telas atingido. Pausando para verificação manual.")
-        page.pause()
         browser.close()
         return "⚠️ Candidatura não foi enviada automaticamente. Verifique manualmente."
 
