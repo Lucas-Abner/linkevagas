@@ -83,6 +83,7 @@ UniCesumar | 2024 – Atual
     )
 ]
 
+MODEL_GPT = OpenAIResponses(id="openai/gpt-oss-20b", api_key=os.getenv("GROQ_API_KEY"), base_url='https://api.groq.com/openai/v1',temperature=0.7)  # Configuração para GPT-3.5
 MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
 MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:9b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
 
@@ -99,7 +100,7 @@ vagas_escolhidas = buscar_multiplas_vagas(buscar_vagas, quantidade_vagas)
 
 analista_ats = Agent(
     name="Analista de ATS",
-    model=MODEL_OLLAMA_QWEN2,  # Usando o modelo mais leve para análise de vaga
+    model=MODEL_GPT,  # Usando o modelo mais leve para análise de vaga
     description="Analisa descrições de vagas e extrai os termos essenciais.",
     instructions=f"Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. Extraia as informações de forma ATÔMICA e CURTA (máximo 3 palavras por item). Transforme exigências complexas em tags diretas. Se houver a palavra 'ou', coloque na lista de desejaveis.",
     expected_output="Gere o output estritamente preenchendo o schema de technical_terms, soft_skills e desejaveis.",
@@ -115,7 +116,7 @@ analista_ats = Agent(
 # ═════════════════════════════════════════════
 agente_leitor = Agent(
     name="Leitor de CV",
-    model=MODEL_OLLAMA_QWEN2,
+    model=MODEL_GPT,
     description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
     instructions="""Você tem UMA única responsabilidade: recuperar o conteúdo do currículo base.
 
@@ -137,7 +138,7 @@ agente_leitor = Agent(
 # ═════════════════════════════════════════════
 agente_redator = Agent(
     name="Redator de CV",
-    model=MODEL_OLLAMA_QWEN2,
+    model=MODEL_GPT,
     description="Reescreve o currículo em Markdown otimizado para ATS e salva o arquivo.",
     instructions=f"""Você recebe dois insumos via prompt:
     - CONTEÚDO_BASE: o currículo original do candidato (fornecido pelo Leitor de CV).

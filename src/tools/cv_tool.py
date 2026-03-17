@@ -61,7 +61,7 @@ def salvar_cv_otimizado_md(conteudo_md: str, nome_vaga: str) -> str:
     print(f"Salvando currículo otimizado como {nome_arquivo}...")
     with open(nome_arquivo, "w", encoding="utf-8") as f:
         f.write(conteudo_md)
-    return f"Salvo com sucesso em {nome_arquivo}"
+    return nome_arquivo
 
 def converter_md_para_pdf(caminho_md: str) -> str:
     """

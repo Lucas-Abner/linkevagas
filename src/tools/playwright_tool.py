@@ -165,113 +165,256 @@ def buscar_multiplas_vagas(termo_pesquisa: str, quantidade_vagas=1):
         browser.close()
     return caixa_vagas
 
-def preencher_perguntas_adicionais(modal, page):
+def descobrir_e_preencher_todos_campos(modal, page):
     """
-    Preenche dinamicamente as perguntas adicionais do Easy Apply.
-    Lê cada label e decide o valor com base no texto da pergunta.
+    Descobre TODOS os campos disponíveis no formulário (inputs, selects, 
+    checkboxes, textareas) mesmo sem labels, e preenche com LLM.
     """
-    # Mapeamento de palavras-chave → resposta
-    respostas = {
-        "python":                   "2",
-        "rag":                      "1",
-        "retrieval-augmented":      "1",
-        "langchain":                "1",
-        "fastapi":                  "1",
-        "machine learning":         "1",
-        "deep learning":            "1",
-        "clt":                      "Yes",
-        "aceita":                   "Yes",
-        "accept":                   "Yes",
-        "reside":                   "Yes",
-        "llm":                      "1",
-        "e-mail":                   "lucascaixeta02@gmail.com",
-        "english":                  "1",
-        "inglês":                   "1",
-        "artificial intelligence":  "1",
-        "inteligência artificial":  "1",
-        "ia":                       "1",
-        "agentes ia":               "1",
-        "disponibilidade para início":"Imediata",
-        "linkedin":                 "https://www.linkedin.com/in/lucas-abner-caixeta-oliveira",
-        "nome completo":            "Lucas Abner Caixeta de Oliveira",
-        "telefone":                 "11960136292"
+    respostas_mapeadas = {
+        "python": "2",
+        "rag": "1",
+        "retrieval-augmented": "1",
+        "langchain": "1",
+        "fastapi": "1",
+        "machine learning": "1",
+        "deep learning": "1",
+        "clt": "Yes",
+        "aceita": "Yes",
+        "accept": "Yes",
+        "reside": "Yes",
+        "llm": "1",
+        "e-mail": "lucascaixeta02@gmail.com",
+        "english": "1",
+        "inglês": "1",
+        "artificial intelligence": "1",
+        "inteligência artificial": "1",
+        "ia": "1",
+        "agentes ia": "1",
+        "disponibilidade para início": "Imediata",
+        "linkedin": "https://www.linkedin.com/in/lucas-abner-caixeta-oliveira",
+        "nome completo": "Lucas Abner Caixeta de Oliveira",
+        "telefone": "11960136292"
     }
 
     page.wait_for_timeout(1000)
+    campos_processados = set()
 
-    # Preenche inputs de texto
-    inputs = modal.locator("input.artdeco-text-input--input")
-    count = inputs.count()
-
-    for i in range(count):
+    # ═══════════════════════════════════════════════════════════════
+    # 1️⃣ INPUTS DE TEXTO - com ou sem label
+    # ═══════════════════════════════════════════════════════════════
+    print("\n📝 Processando INPUTS DE TEXTO...")
+    inputs = modal.locator("input.artdeco-text-input--input, input[type='text']")
+    
+    for i in range(inputs.count()):
         inp = inputs.nth(i)
-        input_id = inp.get_attribute("id") or ""
+        input_id = inp.get_attribute("id") or f"input_{i}"
+        
+        if input_id in campos_processados:
+            continue
+        campos_processados.add(input_id)
 
-        # Busca o label associado ao input pelo 'for'
-        label = modal.locator(f"label[for='{input_id}']")
-        if label.count() == 0:
+        # Tenta encontrar a pergunta de diferentes formas
+        pergunta = extrair_texto_pergunta(modal, inp, input_id)
+        
+        if not pergunta:
+            print(f"  ⏭️  Input {i} sem pergunta detectável. Pulando...")
             continue
 
-        label_text = label.inner_text().strip().lower()
-        print(f"  Pergunta encontrada: {label_text[:60]}...")
+        print(f"  Pergunta: {pergunta[:60]}...")
 
+        # Tenta mapeamento pré-definido
         valor = None
-        for chave, resposta in respostas.items():
-            if chave in label_text:
+        for chave, resposta in respostas_mapeadas.items():
+            if chave in pergunta.lower():
                 valor = resposta
                 break
 
-        if valor:
-            inp.fill(valor)
-            print(f"  ✅ Preenchido com: {valor}")
-        else:
-            print(f"  ⚠️  Sem resposta mapeada para: {label_text[:60]}")
-            resposta = resposta_pergunta_llm(label_text, respostas)
-            inp.fill(resposta)
+        # Se não encontrou, pede para LLM
+        if not valor:
+            valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
+        
+        inp.fill(valor)
+        print(f"  ✅ Preenchido com: {valor}")
 
-    # Preenche selects (dropdowns)
-    selects = modal.locator("select[data-test-text-entity-list-form-select]")
-    count_selects = selects.count()
+    # ═══════════════════════════════════════════════════════════════
+    # 2️⃣ TEXTAREAS
+    # ═══════════════════════════════════════════════════════════════
+    print("\n📝 Processando TEXTAREAS...")
+    textareas = modal.locator("textarea")
+    
+    for i in range(textareas.count()):
+        ta = textareas.nth(i)
+        ta_id = ta.get_attribute("id") or f"textarea_{i}"
+        
+        if ta_id in campos_processados:
+            continue
+        campos_processados.add(ta_id)
 
-    for i in range(count_selects):
-        sel = selects.nth(i)
-        select_id = sel.get_attribute("id") or ""
-
-        label = modal.locator(f"label[for='{select_id}']")
-        if label.count() == 0:
+        pergunta = extrair_texto_pergunta(modal, ta, ta_id)
+        
+        if not pergunta:
+            print(f"  ⏭️  Textarea {i} sem pergunta detectável. Pulando...")
             continue
 
-        label_text = label.inner_text().strip().lower()
-        print(f"  Dropdown encontrado: {label_text[:60]}...")
-        page.wait_for_timeout(500)
-
-        opcoes_disponiveis = sel.locator("option")
-        opcoes_disponiveis = [op.strip() for op in opcoes_disponiveis.all_inner_texts()]
+        print(f"  Pergunta: {pergunta[:60]}...")
 
         valor = None
-        for chave, resposta in respostas.items():
-            if chave in label_text:
+        for chave, resposta in respostas_mapeadas.items():
+            if chave in pergunta.lower():
                 valor = resposta
                 break
 
         if not valor:
-            contexto = f"Pergunta: {label_text}\nOpções disponíveis: {opcoes_disponiveis}\nEscolha APENAS uma das opções acima, exatamente como escrita."
-            valor = resposta_pergunta_llm(contexto, respostas)
-            print(f"  LLM sugeriu: {valor}")
+            valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
+        
+        ta.fill(valor)
+        print(f"  ✅ Preenchido com: {valor[:50]}...")
 
-        opcao_escolhida = None
-        for op in opcoes_disponiveis:
-            if valor.lower() in op.lower():
-                opcao_escolhida = op
+    # ═══════════════════════════════════════════════════════════════
+    # 3️⃣ DROPDOWNS/SELECTS
+    # ═══════════════════════════════════════════════════════════════
+    print("\n🔽 Processando DROPDOWNS...")
+    selects = modal.locator("select")
+    
+    for i in range(selects.count()):
+        sel = selects.nth(i)
+        sel_id = sel.get_attribute("id") or f"select_{i}"
+        
+        if sel_id in campos_processados:
+            continue
+        campos_processados.add(sel_id)
+
+        pergunta = extrair_texto_pergunta(modal, sel, sel_id)
+        
+        if not pergunta:
+            print(f"  ⏭️  Select {i} sem pergunta detectável. Pulando...")
+            continue
+
+        print(f"  Pergunta: {pergunta[:60]}...")
+
+        opcoes = sel.locator("option").all_inner_texts()
+        opcoes = [op.strip() for op in opcoes if op.strip()]
+
+        valor = None
+        for chave, resposta in respostas_mapeadas.items():
+            if chave in pergunta.lower():
+                valor = resposta
                 break
 
-        if valor:
-            sel.select_option(label=opcao_escolhida)
-            print(f"  ✅ Selecionado: {valor}")
-        else:
-            print(f"  ⚠️  Sem resposta mapeada para dropdown: {label_text[:60]}")
-            sel.select_option(label=opcoes_disponiveis[0])  # Seleciona a primeira opção como fallback
-            print(f"  ⚠️ Fallback: selecionado primeira opção: {opcoes_disponiveis[0]}")
+        if not valor:
+            contexto = f"Pergunta: {pergunta}\nOpções: {opcoes}\nEscolha UMA opção exatamente como escrita."
+            valor = resposta_pergunta_llm(contexto, respostas_mapeadas)
+
+        # Encontra a opção que melhor combina
+        opcao_selecionada = None
+        for op in opcoes:
+            if valor.lower() in op.lower() or op.lower() in valor.lower():
+                opcao_selecionada = op
+                break
+        
+        opcao_selecionada = opcao_selecionada or opcoes[0]
+        sel.select_option(label=opcao_selecionada)
+        print(f"  ✅ Selecionado: {opcao_selecionada}")
+
+    # ═══════════════════════════════════════════════════════════════
+    # 4️⃣ CHECKBOXES e RADIO BUTTONS
+    # ═══════════════════════════════════════════════════════════════
+    print("\n☑️  Processando CHECKBOXES/RADIO BUTTONS...")
+    checkboxes = modal.locator("input[type='checkbox'], input[type='radio']")
+    
+    for i in range(checkboxes.count()):
+        cb = checkboxes.nth(i)
+        cb_id = cb.get_attribute("id") or f"checkbox_{i}"
+        
+        if cb_id in campos_processados:
+            continue
+        campos_processados.add(cb_id)
+
+        pergunta = extrair_texto_pergunta(modal, cb, cb_id)
+        
+        if not pergunta:
+            print(f"  ⏭️  Checkbox {i} sem pergunta detectável. Pulando...")
+            continue
+
+        print(f"  Pergunta: {pergunta[:60]}...")
+
+        valor = None
+        for chave, resposta in respostas_mapeadas.items():
+            if chave in pergunta.lower():
+                valor = resposta
+                break
+
+        if not valor:
+            valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
+
+        # Convert para boolean
+        deve_marcar = valor.lower() in ["yes", "sim", "true", "1", "aceito"]
+        
+        if deve_marcar and not cb.is_checked():
+            cb.check()
+            print(f"  ✅ Marcado")
+        elif not deve_marcar and cb.is_checked():
+            cb.uncheck()
+            print(f"  ✅ Desmarcado")
+
+def extrair_texto_pergunta(modal, elemento, elemento_id: str) -> str:
+    """
+    Tenta extrair o texto da pergunta de várias formas:
+    1. Label com 'for' attribute
+    2. aria-label do elemento
+    3. placeholder
+    4. Title/tooltip
+    5. Texto próximo visualmente
+    """
+    
+    # Tenta label[for='id']
+    label = modal.locator(f"label[for='{elemento_id}']")
+    if label.count() > 0:
+        texto = label.inner_text().strip()
+        if texto:
+            return texto
+    
+    # Tenta aria-label
+    aria_label = elemento.get_attribute("aria-label")
+    if aria_label:
+        return aria_label.strip()
+    
+    # Tenta placeholder
+    placeholder = elemento.get_attribute("placeholder")
+    if placeholder:
+        return placeholder.strip()
+    
+    # Tenta title/tooltip
+    title = elemento.get_attribute("title")
+    if title:
+        return title.strip()
+    
+    # Tenta encontrar label genérico próximo
+    parent = elemento.locator("..")
+    labels_proximo = parent.locator("label")
+    if labels_proximo.count() > 0:
+        texto = labels_proximo.first.inner_text().strip()
+        if texto:
+            return texto
+    
+    return ""
+
+# ═══════════════════════════════════════════════════════════════
+# USAR ASSIM NA FUNÇÃO detectar_e_preencher_tela:
+# ═══════════════════════════════════════════════════════════════
+def detectar_e_preencher_tela_v2(modal, page, nome_cv: str) -> str:
+    """Versão melhorada que usa a nova função"""
+    page.wait_for_timeout(1000)
+
+    # ... código anterior para nome, email, telefone, CV ...
+
+    # ── Tela de perguntas adicionais (NOVO) ──
+    inputs_adicionais = modal.locator("input, textarea, select")
+    if inputs_adicionais.count() > 0:
+        descobrir_e_preencher_todos_campos(modal, page)  # 👈 NOVA FUNÇÃO
+        return "perguntas"
+
+    return "desconhecida"
 
 def resposta_pergunta_llm(label_text: str, respostas: dict) -> str:
     """
@@ -304,36 +447,36 @@ def detectar_e_preencher_tela(modal, page, nome_cv: str) -> str:
     page.wait_for_timeout(1000)
 
     # ── Tela de informações de contato (nome, email, localização) ──
-    # first_name = modal.get_by_label("First name")
-    # if first_name.count() > 0 and first_name.is_visible():
-    #     first_name.fill("Lucas Abner")
+    first_name = modal.get_by_label("First name")
+    if first_name.count() > 0 and first_name.is_visible():
+        first_name.fill("Lucas Abner")
         
-    #     last_name = modal.get_by_label("Last name")
-    #     if last_name.count() > 0 and last_name.is_visible():
-    #         last_name.fill("Caixeta de Oliveira")
+        last_name = modal.get_by_label("Last name")
+        if last_name.count() > 0 and last_name.is_visible():
+            last_name.fill("Caixeta de Oliveira")
 
-    #     email = modal.get_by_label("Email address")
-    #     if email.count() > 0 and email.is_visible():
-    #         try:
-    #             email.select_option(value="lucascaixeta02@gmail.com")
-    #         except Exception:
-    #             pass  # Já preenchido ou campo de texto
+    email = modal.get_by_label("Email address")
+    if email.count() > 0 and email.is_visible():
+        try:
+            email.select_option(value="lucascaixeta02@gmail.com")
+        except Exception:
+            pass  # Já preenchido ou campo de texto
 
-    #     loc_input = modal.get_by_label("Location (city)")
-    #     if loc_input.count() > 0 and loc_input.is_visible():
-    #         loc_input.click()
-    #         loc_input.fill("Campinas")
-    #         page.wait_for_timeout(500)
-    #         loc_input.press("ArrowDown")
-    #         loc_input.press("Enter")
+    loc_input = modal.get_by_label("Location (city)")
+    if loc_input.count() > 0 and loc_input.is_visible():
+        loc_input.click()
+        loc_input.fill("Campinas")
+        page.wait_for_timeout(500)
+        loc_input.press("ArrowDown")
+        loc_input.press("Enter")
 
-    #     return "contato"
 
     # ── Tela de telefone ──
     telefone = modal.get_by_label("Phone number")
     if telefone.count() > 0 and telefone.is_visible():
         telefone.fill("11960136292")
         print("✅ Telefone preenchido")
+        return "telefone"
         
 
     # ── Tela de upload de CV ──
@@ -347,8 +490,8 @@ def detectar_e_preencher_tela(modal, page, nome_cv: str) -> str:
     # ── Tela de perguntas adicionais ──
     inputs_adicionais = modal.locator("input.artdeco-text-input--input")
     selects_adicionais = modal.locator("select[data-test-text-entity-list-form-select]")
-    if inputs_adicionais.count() > 0 or selects_adicionais.count() > 0:
-        preencher_perguntas_adicionais(modal, page)
+    if inputs_adicionais.count() > 0:
+        descobrir_e_preencher_todos_campos(modal, page)
         return "perguntas"
 
     return "desconhecida"
@@ -428,7 +571,7 @@ def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
         browser.close()
         return "⚠️ Candidatura não foi enviada automaticamente. Verifique manualmente."
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 #     # caixa = buscar_multiplas_vagas("Desenvolvedor Python", 1)
 #     # print(caixa[0]["titulo"][:500].replace(" ", "_").lower())
 
@@ -436,7 +579,4 @@ if __name__ == "__main__":
 
 #     # print(r)
 
-#     gerar_sessao_linkedin()
-
-    r = resposta_pergunta_llm()
-    print(f"Resposta da LLM para a pergunta: {r}")
+    # gerar_sessao_linkedin()
