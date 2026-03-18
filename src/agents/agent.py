@@ -90,7 +90,6 @@ MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:9b", host="http://localhost:11434", opti
 buscar_vagas = os.environ.get("BUSCAR_VAGA", "Agente de IA")
 quantidade_vagas = os.environ.get("QUANTIDADE_VAGAS", 1)  # Recomendado processar 1 por vez para não confundir o modelo local
 
-# O Schema se mantém APENAS para o extrator ATS
 class ATSExtract(BaseModel):
     technical_terms: List[str] = Field(description="Tecnologias e ferramentas atômicas (ex: Python, AWS)")
     soft_skills: List[str] = Field(description="Habilidades comportamentais")
@@ -100,23 +99,16 @@ vagas_escolhidas = buscar_multiplas_vagas(buscar_vagas, quantidade_vagas)
 
 analista_ats = Agent(
     name="Analista de ATS",
-    model=MODEL_GPT,  # Usando o modelo mais leve para análise de vaga
+    model=MODEL_OLLAMA_QWEN2,  # Usando o modelo mais leve para análise de vaga
     description="Analisa descrições de vagas e extrai os termos essenciais.",
     instructions=f"Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. Extraia as informações de forma ATÔMICA e CURTA (máximo 3 palavras por item). Transforme exigências complexas em tags diretas. Se houver a palavra 'ou', coloque na lista de desejaveis.",
     expected_output="Gere o output estritamente preenchendo o schema de technical_terms, soft_skills e desejaveis.",
     output_schema=ATSExtract
 )
 
-# O Redator perde o schema e ganha as TOOLS para ter total liberdade de reescrita
-
-# ═════════════════════════════════════════════
-# AGENTE 1 — LEITOR
-# Responsabilidade única: ler o CV base e retornar o conteúdo bruto.
-# Uma ferramenta → sem ambiguidade de qual chamar.
-# ═════════════════════════════════════════════
 agente_leitor = Agent(
     name="Leitor de CV",
-    model=MODEL_GPT,
+    model=MODEL_OLLAMA_QWEN3,
     description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
     instructions="""Você tem UMA única responsabilidade: recuperar o conteúdo do currículo base.
 
@@ -130,15 +122,9 @@ agente_leitor = Agent(
     tools=[ler_cv_base_md],
 )
 
-# ═════════════════════════════════════════════
-# AGENTE 2 — REDATOR
-# Responsabilidade única: reescrever o CV com base nos dados reais
-# recebidos do Agente 1 + termos ATS fornecidos no prompt.
-# Uma ferramenta → só pode salvar, não pode ler nem converter.
-# ═════════════════════════════════════════════
 agente_redator = Agent(
     name="Redator de CV",
-    model=MODEL_GPT,
+    model=MODEL_OLLAMA_QWEN2,
     description="Reescreve o currículo em Markdown otimizado para ATS e salva o arquivo.",
     instructions=f"""Você recebe dois insumos via prompt:
     - CONTEÚDO_BASE: o currículo original do candidato (fornecido pelo Leitor de CV).
@@ -179,11 +165,6 @@ agente_copia_cola = Agent(
     tools=[salvar_cv_otimizado_md]
 )
 
-# ═════════════════════════════════════════════
-# AGENTE 3 — CONVERSOR
-# Responsabilidade única: converter o arquivo Markdown salvo em PDF.
-# Uma ferramenta → não pode ler nem reescrever, só converter.
-# ═════════════════════════════════════════════
 agente_conversor = Agent(
     name="Conversor de CV",
     model=MODEL_OLLAMA_QWEN2,
@@ -214,12 +195,6 @@ agente_envio = Agent(
     tools=[tool_envio_candidatura]
 )
 
-# ═════════════════════════════════════════════
-# ORQUESTRADOR — Pipeline sequencial
-# Conecta os três agentes em cadeia, passando o output de um
-# como input do próximo. Sem ferramentas próprias = zero alucinação
-# de ferramenta no orquestrador.
-# ═════════════════════════════════════════════
 def pipeline_cv(termos_ats: list) -> str:
     """
     Executa o pipeline completo de otimização de currículo.
@@ -276,9 +251,6 @@ def pipeline_cv(termos_ats: list) -> str:
 
     print("\n✅ Pipeline concluído.")
 
-# ─────────────────────────────────────────────
-# EXECUÇÃO
-# ─────────────────────────────────────────────
 if __name__ == "__main__":
     print("Iniciando o pipeline de otimização de currículo...\n")
     # print(f"Vaga escolhida para otimização: {vagas_escolhidas[-1]['titulo']}\n{vagas_escolhidas[-1]['descricao']}")

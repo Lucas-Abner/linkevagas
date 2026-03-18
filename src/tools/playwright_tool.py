@@ -2,6 +2,7 @@ from playwright.sync_api import sync_playwright
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 import json
 import time
 import os
@@ -179,6 +180,8 @@ def descobrir_e_preencher_todos_campos(modal, page):
         "machine learning": "1",
         "deep learning": "1",
         "clt": "Yes",
+        "pretensão salarial": "5000",
+        "salary": "5000",
         "aceita": "Yes",
         "accept": "Yes",
         "reside": "Yes",
@@ -257,15 +260,8 @@ def descobrir_e_preencher_todos_campos(modal, page):
             continue
 
         print(f"  Pergunta: {pergunta[:60]}...")
-
-        valor = None
-        for chave, resposta in respostas_mapeadas.items():
-            if chave in pergunta.lower():
-                valor = resposta
-                break
-
-        if not valor:
-            valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
+    
+        valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
         
         ta.fill(valor)
         print(f"  ✅ Preenchido com: {valor[:50]}...")
@@ -296,14 +292,8 @@ def descobrir_e_preencher_todos_campos(modal, page):
         opcoes = [op.strip() for op in opcoes if op.strip()]
 
         valor = None
-        for chave, resposta in respostas_mapeadas.items():
-            if chave in pergunta.lower():
-                valor = resposta
-                break
-
-        if not valor:
-            contexto = f"Pergunta: {pergunta}\nOpções: {opcoes}\nEscolha UMA opção exatamente como escrita."
-            valor = resposta_pergunta_llm(contexto, respostas_mapeadas)
+        contexto = f"Pergunta: {pergunta}\nOpções: {opcoes}\nEscolha UMA opção exatamente como escrita."
+        valor = resposta_pergunta_llm(contexto, respostas_mapeadas)
 
         # Encontra a opção que melhor combina
         opcao_selecionada = None
@@ -338,14 +328,7 @@ def descobrir_e_preencher_todos_campos(modal, page):
 
         print(f"  Pergunta: {pergunta[:60]}...")
 
-        valor = None
-        for chave, resposta in respostas_mapeadas.items():
-            if chave in pergunta.lower():
-                valor = resposta
-                break
-
-        if not valor:
-            valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
+        valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
 
         # Convert para boolean
         deve_marcar = valor.lower() in ["yes", "sim", "true", "1", "aceito"]
@@ -399,10 +382,7 @@ def extrair_texto_pergunta(modal, elemento, elemento_id: str) -> str:
     
     return ""
 
-# ═══════════════════════════════════════════════════════════════
-# USAR ASSIM NA FUNÇÃO detectar_e_preencher_tela:
-# ═══════════════════════════════════════════════════════════════
-def detectar_e_preencher_tela_v2(modal, page, nome_cv: str) -> str:
+def detectar_e_preencher_tela_v2(modal, page) -> str:
     """Versão melhorada que usa a nova função"""
     page.wait_for_timeout(1000)
 
@@ -421,11 +401,7 @@ def resposta_pergunta_llm(label_text: str, respostas: dict) -> str:
     Chama a LLM para obter uma resposta para uma pergunta adicional do Easy Apply, com base no texto do label.
     """
 
-    chat = ChatOpenAI(
-        api_key=os.environ.get("OPENAI_API_KEY", "GROQ_API_KEY_REMOVED"),
-        base_url="https://api.groq.com/openai/v1",
-        model="openai/gpt-oss-20b",
-    )
+    chat = ChatOllama(model="qwen2.5:7b", base_url="http://localhost:11434", temperature=0.7) 
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", "Você é um assistente especializado em preencher formulários de candidatura do LinkedIn. Com base no texto da pergunta, forneça a resposta mais adequada e concisa possível. Use as seguintes dicas para interpretar as perguntas:\n\n- Se a pergunta mencionar habilidades técnicas (ex: Python, Machine Learning), responda com o nível de experiência (0-5) ou 'Yes' se for uma pergunta de checkbox.\n- Se a pergunta for sobre salário, forneça um valor realista baseado no mercado para um cargo de AI Engineer Jr no Brasil e SOMENTE números.\n- Se a pergunta for sobre disponibilidade ou localização, responda com informações reais (ex: 'Imediata', 'Campinas').\n- Se a pergunta for sobre aceitar termos ou residir em determinado local, responda com 'Yes' ou 'No' conforme apropriado.\nSe perguntar o genero, sempre responda masculino\n- Para perguntas que não se encaixem nas categorias acima, use seu conhecimento geral para inferir a resposta mais provável\nSe a mensagem for dropdown, responda apenas com a opção exata a ser selecionada, sem explicações ou texto adicional.\nREGRA DE OURO: Tudo que exige números, responda somente com números. Para perguntas de checkbox, responda apenas 'Yes' ou 'No'. Evite qualquer texto explicativo ou adicional. Responda apenas o valor a ser preenchido no formulário.\nPegue essa lista pré-existente de respostas: {respostas}\nUse essa lista para responder perguntas semelhantes, mas se a pergunta for diferente, use seu conhecimento para inferir a resposta correta. Seja conciso e direto ao ponto."),
