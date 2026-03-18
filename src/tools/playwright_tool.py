@@ -208,7 +208,7 @@ def descobrir_e_preencher_todos_campos(modal, page):
         "accept": "Yes",
         "reside": "Yes",
         "llm": "1",
-        "e-mail": "lucascaixeta02@gmail.com",
+        "e-mail": os.getenv("EMAIL"),
         "english": "1",
         "inglês": "1",
         "artificial intelligence": "1",
@@ -218,9 +218,9 @@ def descobrir_e_preencher_todos_campos(modal, page):
         "ia": "1",
         "agentes ia": "1",
         "disponibilidade para início": "Imediata",
-        "linkedin": "https://www.linkedin.com/in/lucas-abner-caixeta-oliveira",
-        "nome completo": "Lucas Abner Caixeta de Oliveira",
-        "telefone": "11960136292"
+        "linkedin": os.getenv("LINKEDIN_LINK"),
+        "nome completo": os.getenv("NOME_COMPLETO"),
+        "telefone": os.getenv("TELEFONE")
     }
 
     page.wait_for_timeout(1000)
