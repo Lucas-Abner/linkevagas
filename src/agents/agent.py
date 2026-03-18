@@ -83,7 +83,7 @@ UniCesumar | 2024 – Atual
     )
 ]
 
-MODEL_GPT = OpenAIResponses(id="openai/gpt-oss-20b", api_key=os.getenv("GROQ_API_KEY"), base_url='https://api.groq.com/openai/v1',temperature=0.7)  # Configuração para GPT-3.5
+MODEL_GPT = OpenAIResponses(id="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
 MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
 MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:9b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
 
@@ -124,7 +124,7 @@ agente_leitor = Agent(
 
 agente_redator = Agent(
     name="Redator de CV",
-    model=MODEL_OLLAMA_QWEN2,
+    model=MODEL_GPT,
     description="Reescreve o currículo em Markdown otimizado para ATS e salva o arquivo.",
     instructions=f"""Você recebe dois insumos via prompt:
     - CONTEÚDO_BASE: o currículo original do candidato (fornecido pelo Leitor de CV).
@@ -133,11 +133,11 @@ agente_redator = Agent(
     PASSOS OBRIGATÓRIOS:
     1. Leia o CONTEÚDO_BASE com atenção. Esse é o único histórico real do candidato.
     2. Cruze o resumo profissional, habilidades técnicas e a experiência do candidato com os TERMOS_ATS.
-    3. Reescreva o currículo aplicando:
+    3. Reescreva o currículo aplicando as técnicas de otimização para ATS, garantindo que os termos extraídos sejam incorporados de forma natural e estratégica:
        - Técnica XYZ no resumo profissional para destacar as palavras-chave.
        - Técnica XYZ na seção de habilidades técnicas para alinhar com os termos ATS.
        - Técnica XYZ nas descrições de experiência (Realizei X medido por Y fazendo Z).
-       - Técnica XYZ para destacar projetos relevantes.
+       - Técnica XYZ para destacar projetos em destaque.
        - Insira os termos ATS de forma natural onde houver correspondência real.
     4. REGRA DE OURO: Jamais invente ferramentas, graduações ou cargos ausentes no
        CONTEÚDO_BASE. Se precisar de seções novas, use apenas títulos genéricos como
@@ -231,7 +231,6 @@ def pipeline_cv(termos_ats: list) -> str:
             """
         resultado_redacao = agente_redator.run(prompt_redacao)  
         redacao = extrair_bloco_markdown(resultado_redacao.content)  # Limpa o output para pegar só o markdown
-        pprint_run_response(redacao)
 
         resultado_md = agente_copia_cola.run(f"Pegue o nome da vaga {termo['titulo']} e o conteúdo {redacao}")
         pprint_run_response(resultado_md)
