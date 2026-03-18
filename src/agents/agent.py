@@ -83,7 +83,7 @@ UniCesumar | 2024 – Atual
     )
 ]
 
-MODEL_GPT = OpenAIResponses(id="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
+MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
 MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
 MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:9b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
 

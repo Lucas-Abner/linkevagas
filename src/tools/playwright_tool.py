@@ -7,6 +7,10 @@ import json
 import time
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Carrega as variáveis de ambiente do arquivo .env
+load_dotenv()
 
 def sessao_esta_valida() -> bool:
     """Verifica se o arquivo de sessão existe e se o cookie li_at não expirou."""
@@ -38,8 +42,24 @@ def gerar_sessao_linkedin():
         page = context.new_page()
 
         page.goto("https://www.linkedin.com/login")
-        print("⏳ Faça login no LinkedIn e pressione 'Resume' no Playwright Inspector...")
-        page.pause()
+        print("⏳ Fazendo login no LinkedIn com credenciais do .env...")
+        
+        # Lê credenciais do .env
+        email = os.getenv("LINKEDIN_EMAIL")
+        password = os.getenv("LINKEDIN_PASSWORD")
+
+        if email and password:
+            login = page.locator("input[name='session_key']")
+            login.fill(email)
+            senha = page.locator("input[name='session_password']")
+            senha.fill(password)
+            page.locator("button[type='submit']").click()
+            print("🔑 Login realizado com credenciais do .env")
+            page.wait_for_timeout(5000)  # Espera 5 segundos para garantir que o login foi processado
+        else:
+            print("⚠️ LINKEDIN_EMAIL ou LINKEDIN_PASSWORD não configurados no .env")
+            print("ℹ️ Faça login manualmente no navegador que se abriu...")
+            page.pause()
 
         context.storage_state(path="linkedin_session.json")
         print("✅ Sessão do LinkedIn salva com sucesso!")
@@ -663,7 +683,7 @@ def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
         page.pause()
         return "⚠️ Candidatura não foi enviada automaticamente. Verifique manualmente."
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
 #     # caixa = buscar_multiplas_vagas("Desenvolvedor Python", 1)
 #     # print(caixa[0]["titulo"][:500].replace(" ", "_").lower())
 
@@ -671,4 +691,4 @@ def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
 
 #     # print(r)
 
-    # gerar_sessao_linkedin()
+    gerar_sessao_linkedin()
