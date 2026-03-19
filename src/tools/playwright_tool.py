@@ -251,8 +251,12 @@ def descobrir_e_preencher_todos_campos(modal, page):
 
         valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
         
-        inp.fill(valor)
-        print(f"  ✅ Preenchido com: {valor}")
+        # Valida que o valor não é vazio ou None
+        if valor and valor.strip():
+            inp.fill(valor.strip())
+            print(f"  ✅ Preenchido com: {valor.strip()}")
+        else:
+            print(f"  ⚠️  Resposta vazia para: {pergunta[:30]}...")
 
     # ═══════════════════════════════════════════════════════════════
     # 2️⃣ TEXTAREAS
@@ -278,8 +282,12 @@ def descobrir_e_preencher_todos_campos(modal, page):
     
         valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
         
-        ta.fill(valor)
-        print(f"  ✅ Preenchido com: {valor[:50]}...")
+        # Valida que o valor não é vazio ou None
+        if valor and valor.strip():
+            ta.fill(valor.strip())
+            print(f"  ✅ Preenchido com: {valor.strip()[:50]}...")
+        else:
+            print(f"  ⚠️  Resposta vazia para: {pergunta[:30]}...")
 
     # ═══════════════════════════════════════════════════════════════
     # 3️⃣ DROPDOWNS/SELECTS
@@ -312,10 +320,12 @@ def descobrir_e_preencher_todos_campos(modal, page):
 
         # Encontra a opção que melhor combina
         opcao_selecionada = None
-        for op in opcoes:
-            if valor.lower() in op.lower() or op.lower() in valor.lower():
-                opcao_selecionada = op
-                break
+        if valor and valor.strip():
+            valor_limpo = valor.strip().lower()
+            for op in opcoes:
+                if valor_limpo in op.lower() or op.lower() in valor_limpo:
+                    opcao_selecionada = op
+                    break
         
         opcao_selecionada = opcao_selecionada or opcoes[0]
         sel.select_option(label=opcao_selecionada)
@@ -337,16 +347,19 @@ def descobrir_e_preencher_todos_campos(modal, page):
 
         pergunta = extrair_texto_pergunta(modal, cb, cb_id)
         
+        # IMPORTANTE: NÃO pula se não encontrou pergunta! Faz a LLM responder mesmo assim
         if not pergunta:
-            print(f"  ⏭️  Checkbox {i} sem pergunta detectável. Pulando...")
-            continue
+            print(f"  ⏭️  Checkbox {i} sem pergunta específica detectada. Tentando responder genericamente...")
+            pergunta = f"Checkbox #{i} - Responda 'Yes' para aceitar ou 'No' para recusar."
 
         print(f"  Pergunta: {pergunta[:60]}...")
 
         valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
 
-        # Convert para boolean
-        deve_marcar = valor.lower() in ["yes", "sim", "true", "1", "aceito", "sim, aceito"]
+        # Convert para boolean - valida que valor não é None/vazio
+        deve_marcar = False
+        if valor and valor.strip():
+            deve_marcar = valor.strip().lower() in ["yes", "sim", "true", "1", "aceito", "sim, aceito"]
         
         # Verifica o estado atual
         esta_marcado = False
@@ -392,6 +405,7 @@ def extrair_texto_pergunta(modal, elemento, elemento_id: str) -> str:
     4. placeholder
     5. Title/tooltip
     6. Texto do parent ou próximos elementos
+    7. Procura agressivamente por qualquer texto no contexto
     """
     
     # Tenta aria-label PRIMEIRO (mais específico)
@@ -433,26 +447,49 @@ def extrair_texto_pergunta(modal, elemento, elemento_id: str) -> str:
         parent = elemento.locator("ancestor::div[1]")
         if parent.count() > 0:
             # Procura por elementos de texto próximos (label, span, p)
-            for seletor_texto in ["label", "span.artdeco-inline-feedback", "p", "div[class*='label']"]:
+            for seletor_texto in ["label", "span.artdeco-inline-feedback", "p", "div[class*='label']", "span"]:
                 elementos_texto = parent.locator(seletor_texto)
-                for i in range(min(3, elementos_texto.count())):  # Pega até 3 primeiros
-                    texto = elementos_texto.nth(i).inner_text().strip()
-                    if texto and len(texto) > 3 and texto.lower() not in ["yes", "no"]:
-                        return texto
+                for i in range(min(5, elementos_texto.count())):  # Pega até 5 primeiros
+                    try:
+                        texto = elementos_texto.nth(i).inner_text().strip()
+                        if texto and len(texto) > 3 and texto.lower() not in ["yes", "no"]:
+                            return texto
+                    except:
+                        pass
+    except:
+        pass
+    
+    # Procura agressivamente em toda a hierarquia acima
+    try:
+        for nivel in range(1, 6):  # Procura até 5 níveis acima
+            ancestor = elemento.locator(f"ancestor::div[{nivel}]")
+            if ancestor.count() > 0:
+                # Procura por qualquer texto dentro
+                all_text = ancestor.inner_text().strip()
+                if all_text and len(all_text) > 10:
+                    # Limpa e pega apenas a primeira frase
+                    primeira_frase = all_text.split('\n')[0].strip()
+                    if primeira_frase and len(primeira_frase) > 5 and primeira_frase.lower() not in ["yes", "no"]:
+                        return primeira_frase[:200]
     except:
         pass
     
     # Fallback: procura em siblings
     try:
         siblings = elemento.locator("parent::*").locator("text=*")
-        for i in range(min(2, siblings.count())):
-            texto = siblings.nth(i).inner_text().strip()
-            if texto and len(texto) > 3 and texto.lower() not in ["yes", "no"]:
-                return texto
+        for i in range(min(5, siblings.count())):
+            try:
+                texto = siblings.nth(i).inner_text().strip()
+                if texto and len(texto) > 3 and texto.lower() not in ["yes", "no"]:
+                    return texto
+            except:
+                pass
     except:
         pass
     
-    return ""
+    # Se não encontrou nada, retorna um texto genérico baseado no tipo de elemento
+    tipo_elemento = elemento.get_attribute("type") or "campo"
+    return f"Pergunta sobre {tipo_elemento}"
 
 def detectar_e_preencher_tela_v2(modal, page) -> str:
     """Versão melhorada que usa a nova função"""
@@ -473,18 +510,23 @@ def resposta_pergunta_llm(label_text: str, respostas: dict) -> str:
     """
     Chama a LLM para obter uma resposta para uma pergunta adicional do Easy Apply, com base no texto do label.
     """
-    chat = ChatOpenAI(id="openai/gpt-oss-20b", base_url="https://api.groq.com/openai/v1", api_key=os.getenv("GROQ_API_KEY"), temperature=0.7) 
-
+    chat = ChatOllama(base_url="http://localhost:11434", model="qwen2.5:7b", temperature=0.7)
+    
+    # Formata as respostas pré-existentes como string para o prompt
+    respostas_str = json.dumps(respostas, ensure_ascii=False, indent=2) if isinstance(respostas, dict) else str(respostas)
+    
+    # Escapa as chaves do JSON para que não sejam interpretadas como variáveis de template
+    respostas_str_escaped = respostas_str.replace("{", "{{").replace("}", "}}")
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "Você é um assistente especializado em preencher formulários de candidatura do LinkedIn. Com base no texto da pergunta, forneça a resposta mais adequada e concisa possível. Use as seguintes dicas para interpretar as perguntas:\n\n- Se a pergunta mencionar habilidades técnicas (ex: Python, Machine Learning), responda com o nível de experiência (0-5) ou 'Yes' se for uma pergunta de checkbox.\n- Se a pergunta for sobre salário, forneça um valor realista baseado no mercado para um cargo de AI Engineer Jr no Brasil e SOMENTE números.\n- Se a pergunta for sobre disponibilidade ou localização, responda com informações reais (ex: 'Imediata', 'Campinas').\n- Se a pergunta for sobre aceitar termos ou residir em determinado local, responda com 'Yes' ou 'No' conforme apropriado.\nSe perguntar o genero, sempre responda masculino\n- Para perguntas que não se encaixem nas categorias acima, use seu conhecimento geral para inferir a resposta mais provável\nSe a mensagem for dropdown, responda apenas com a opção exata a ser selecionada, sem explicações ou texto adicional.\nREGRA DE OURO: Tudo que exige números, responda somente com números. Para perguntas de checkbox, responda apenas 'Yes' ou 'No'. Evite qualquer texto explicativo ou adicional. Responda apenas o valor a ser preenchido no formulário.\nPegue essa lista pré-existente de respostas: {respostas}\nUse essa lista para responder perguntas semelhantes, mas se a pergunta for diferente, use seu conhecimento para inferir a resposta correta. Seja conciso e direto ao ponto.\nSe não souber a resposta, use seu melhor palpite baseado no contexto do formulário de candidatura para um cargo de AI Engineer Jr.\nSempre responda de maneira positiva a perguntas relacionados a LLMs, Agentes IA, automação,inteligência artificial, experiência com Python, disponibilidade para início imediato, aceitação de termos e condições, e disposição para residir em locais específicos, a menos que a pergunta indique claramente o contrário."),
+        ("system", f"Você é um assistente especializado em preencher formulários de candidatura do LinkedIn. Com base no texto da pergunta, forneça a resposta mais adequada e concisa possível. Use as seguintes dicas para interpretar as perguntas:\n\n- Se a pergunta mencionar habilidades técnicas (ex: Python, Machine Learning), responda com o nível de experiência (0-5) ou 'Yes' se for uma pergunta de checkbox.\n- Se a pergunta for sobre salário, forneça um valor realista baseado no mercado para um cargo de AI Engineer Jr no Brasil e SOMENTE números.\n- Se a pergunta for sobre disponibilidade ou localização, responda com informações reais (ex: 'Imediata', 'Campinas').\n- Se a pergunta for sobre aceitar termos ou residir em determinado local, responda com 'Yes' ou 'No' conforme apropriado.\nSe perguntar o genero, sempre responda masculino\n- Para perguntas que não se encaixem nas categorias acima, use seu conhecimento geral para inferir a resposta mais provável\nSe a mensagem for dropdown, responda apenas com a opção exata a ser selecionada, sem explicações ou texto adicional.\nREGRA DE OURO: Tudo que exige números, responda somente com números. Para perguntas de checkbox, responda apenas 'Yes' ou 'No'. Evite qualquer texto explicativo ou adicional. Responda apenas o valor a ser preenchido no formulário.\nPegue essa lista pré-existente de respostas:\n{respostas_str_escaped}\nUse essa lista para responder perguntas semelhantes, mas se a pergunta for diferente, use seu conhecimento para inferir a resposta correta. Seja conciso e direto ao ponto.\nSe não souber a resposta, use seu melhor palpite baseado no contexto do formulário de candidatura para um cargo de AI Engineer Jr.\nSempre responda de maneira positiva a perguntas relacionados a LLMs, Agentes IA, automação,inteligência artificial, experiência com Python, disponibilidade para início imediato, aceitação de termos e condições, e disposição para residir em locais específicos, a menos que a pergunta indique claramente o contrário."),
         ("human", "{pergunta}")
         ]
     )
 
     chain = prompt | chat
 
-    resposta = chain.invoke({"pergunta": label_text, "respostas": respostas})
+    resposta = chain.invoke({"pergunta": label_text})
 
     if hasattr(resposta, "content"):
         conteudo = resposta.content
@@ -492,7 +534,7 @@ def resposta_pergunta_llm(label_text: str, respostas: dict) -> str:
         conteudo = str(resposta)
     
     # Garante que retorna uma string
-    return conteudo if isinstance(conteudo, str) else str(conteudo) 
+    return conteudo if isinstance(conteudo, str) else str(conteudo)
 
 def detectar_e_preencher_tela(modal, page, nome_cv: str) -> str:
     """
@@ -632,55 +674,72 @@ def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
 
         MAX_TELAS = 10  # Limite de segurança para não entrar em loop infinito
 
-        for tela_num in range(1, MAX_TELAS + 1):
-            modal = page.locator(".jobs-easy-apply-modal")
-            page.wait_for_timeout(1000)
-
-            # ── Verifica se é a tela final (botão Enviar/Submit) ──
-            botao_enviar = modal.locator("button[aria-label='Enviar candidatura']")
-            botao_enviar_alt = modal.locator("button[aria-label='Submit application']")
-            botao_enviar_data = modal.locator("button[data-easy-apply-submit-button]")
-
-            for btn in [botao_enviar, botao_enviar_alt, botao_enviar_data]:
-                if btn.count() > 0 and btn.is_visible():
-                    btn.click()
-                    print(f"✅ Candidatura enviada com sucesso na tela {tela_num}!")
-                    page.wait_for_timeout(2000)
-                    browser.close()
-                    return f"Candidatura enviada para: {nome_cv.replace('.pdf', '').replace('_', ' ')}"
-
-            # ── Detecta e preenche a tela atual ──
-            tipo_tela = detectar_e_preencher_tela(modal, page, nome_cv)
-            print(f"📄 Tela {tela_num}: {tipo_tela}")
-
-            page.wait_for_timeout(500)
-
-            # ── Tenta avançar: Revisar > Avançar > Enviar ──
-            botao_revisar = modal.locator("button:has-text('Revisar'), button:has-text('Review')")
-            botao_avancar = modal.locator("button[data-easy-apply-next-button]")
-
-            if botao_revisar.count() > 0 and botao_revisar.is_visible():
-                botao_revisar.click()
-                print(f"  ➡️ Clicou em Revisar")
-            elif botao_avancar.count() > 0 and botao_avancar.is_visible():
-                botao_avancar.click()
-                print(f"  ➡️ Avançou para próxima tela")
-            else:
-                print(f"  ⚠️ Nenhum botão de avanço encontrado na tela {tela_num}")
-                page.screenshot(path=f"debug_tela_{tela_num}.png")
-                # Tenta clicar em qualquer botão primário visível como fallback
-                botao_generico = modal.locator("button.artdeco-button--primary")
-                if botao_generico.count() > 0 and botao_generico.first.is_visible():
-                    botao_generico.first.click()
-                    print(f"  ➡️ Clicou no botão primário genérico")
-                else:
+        try:
+            for tela_num in range(1, MAX_TELAS + 1):
+                # Verifica se a página/modal ainda está válida
+                try:
+                    modal = page.locator(".jobs-easy-apply-modal")
+                    if modal.count() == 0:
+                        print("⚠️ Modal foi fechado. Encerrando candidatura...")
+                        break
+                except Exception as e:
+                    print(f"⚠️ Erro ao acessar modal: {e}")
                     break
+                
+                page.wait_for_timeout(1000)
 
-            page.wait_for_timeout(1500)
+                # ── Verifica se é a tela final (botão Enviar/Submit) ──
+                botao_enviar = modal.locator("button[aria-label='Enviar candidatura']")
+                botao_enviar_alt = modal.locator("button[aria-label='Submit application']")
+                botao_enviar_data = modal.locator("button[data-easy-apply-submit-button]")
 
-        # Se saiu do loop sem enviar
-        print("⚠️ Limite de telas atingido. Pausando para verificação manual.")
-        page.pause()
+                for btn in [botao_enviar, botao_enviar_alt, botao_enviar_data]:
+                    if btn.count() > 0 and btn.is_visible():
+                        btn.click()
+                        print(f"✅ Candidatura enviada com sucesso na tela {tela_num}!")
+                        page.wait_for_timeout(2000)
+                        browser.close()
+                        return f"Candidatura enviada para: {nome_cv.replace('.pdf', '').replace('_', ' ')}"
+
+                # ── Detecta e preenche a tela atual ──
+                tipo_tela = detectar_e_preencher_tela(modal, page, nome_cv)
+                print(f"📄 Tela {tela_num}: {tipo_tela}")
+
+                page.wait_for_timeout(500)
+
+                # ── Tenta avançar: Revisar > Avançar > Enviar ──
+                botao_revisar = modal.locator("button:has-text('Revisar'), button:has-text('Review')")
+                botao_avancar = modal.locator("button[data-easy-apply-next-button]")
+
+                if botao_revisar.count() > 0 and botao_revisar.is_visible():
+                    botao_revisar.click()
+                    print(f"  ➡️ Clicou em Revisar")
+                elif botao_avancar.count() > 0 and botao_avancar.is_visible():
+                    botao_avancar.click()
+                    print(f"  ➡️ Avançou para próxima tela")
+                else:
+                    print(f"  ⚠️ Nenhum botão de avanço encontrado na tela {tela_num}")
+                    page.screenshot(path=f"debug_tela_{tela_num}.png")
+                    # Tenta clicar em qualquer botão primário visível como fallback
+                    botao_generico = modal.locator("button.artdeco-button--primary")
+                    if botao_generico.count() > 0 and botao_generico.first.is_visible():
+                        botao_generico.first.click()
+                        print(f"  ➡️ Clicou no botão primário genérico")
+                    else:
+                        break
+
+                page.wait_for_timeout(1500)
+
+        except Exception as e:
+            print(f"⚠️ Erro durante processamento das telas: {e}")
+        finally:
+            # Se saiu do loop sem enviar
+            print("⚠️ Limite de telas atingido ou erro ocorreu. Pausando para verificação manual.")
+            try:
+                page.pause()
+            except:
+                pass
+        
         return "⚠️ Candidatura não foi enviada automaticamente. Verifique manualmente."
 
 if __name__ == "__main__":

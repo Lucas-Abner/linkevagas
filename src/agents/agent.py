@@ -14,6 +14,8 @@ load_dotenv()
 from src.tools.playwright_tool import buscar_multiplas_vagas, tool_envio_candidatura
 # Importando o novo arsenal de ferramentas
 from src.tools.cv_tool import ler_cv_base_md, salvar_cv_otimizado_md, converter_md_para_pdf
+from src.tools.ats_tool import tool_avaliar_score_ats
+
 
 MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
 MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 0})  # Configuração para Ollama local
@@ -33,7 +35,7 @@ vagas_escolhidas = buscar_multiplas_vagas(buscar_vagas, quantidade_vagas)
 
 analista_ats = Agent(
     name="Analista de ATS",
-    model=MODEL_GPT_OPEN,  # Usando o modelo mais leve para análise de vaga
+    model=MODEL_OLLAMA_QWEN2,  # Usando o modelo mais leve para análise de vaga
     description="Analisa descrições de vagas e extrai os termos essenciais.",
     instructions=f"""Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. 
     Extraia as informações de forma ATÔMICA (máximo 2 a 3 palavras por item). 
@@ -45,7 +47,7 @@ analista_ats = Agent(
 
 agente_leitor = Agent(
     name="Leitor de CV",
-    model=MODEL_GPT_OPEN,
+    model=MODEL_OLLAMA_QWEN2,
     description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
     instructions="""Você tem UMA única responsabilidade: recuperar o conteúdo do currículo base.
 
@@ -62,29 +64,41 @@ agente_leitor = Agent(
 agente_redator = Agent(
     name="Redator de CV",
     model=MODEL_GPT,
-    description="Reescreve o currículo em Markdown otimizado para leitura de robôs ATS, adaptando idioma e neutralizando senioridade.",
-    instructions=f"""Você recebe três insumos via prompt:
-    - VAGA_ORIGINAL: a descrição da vaga (para você detectar o idioma).
-    - CONTEÚDO_BASE: o currículo original do candidato.
-    - TERMOS_ATS: palavras-chave extraídas.
-
+    description="Reescreve o currículo base para otimização ATS, seguindo as regras de formatação e estratégia.",
+    # additional_input=support_format_cv, # Restaurando o suporte de formato!
+    instructions=f"""
+    Você recebe insumos via prompt: CONTEÚDO_BASE e TERMOS_ATS.
+    
     PASSOS OBRIGATÓRIOS PARA OTIMIZAÇÃO ATS:
-    1. ESPELHAMENTO DE IDIOMA (CRÍTICO): Leia a VAGA_ORIGINAL. Se a vaga estiver em INGLÊS, traduza TODO o currículo base para um INGLÊS impecável. Mude os títulos para "SUMMARY", "EXPERIENCE", "SKILLS", "PROJECTS". Nunca gere um CV em português para uma vaga gringa.
-    2. NEUTRALIZAÇÃO DE SENIORIDADE: Remova TODAS as menções à palavra "Júnior", "Junior", "Trainee" ou "Estagiário". 
-       - No topo do CV, use apenas "AI Engineer".
-       - Troque o cargo "Estagiário em Biologia Computacional" por "Computational Biology AI Developer" (ou equivalente no idioma da vaga).
-    3. MATCH EXATO DE PALAVRAS-CHAVE: Incorpore os TERMOS_ATS de forma natural. Se a vaga pede "AWS", escreva "AWS".
-    4. FÓRMULA XYZ NA EXPERIÊNCIA: Reescreva as descrições de experiência e projetos com a estrutura: "Realizei [Ação/Projeto] medido por [Métrica/Impacto] utilizando [Tecnologias ATS]". 
-    5. FORMATAÇÃO CLEAN PARA ATS: 
-       - Use APENAS cabeçalhos Markdown simples (H1, H2, H3) e bullet points clássicos (- ou *).
+    1. MATCH EXATO DE PALAVRAS-CHAVE: Ao adicionar ferramentas aos requisitos, use a grafia EXATA extraída pela análise da vaga.
+    2. RESUMO PROFISSIONAL: Incorpore os termos técnicos e soft skills mais importantes da vaga de forma natural nas três primeiras linhas.
+    3. FÓRMULA XYZ NA EXPERIÊNCIA: Reescreva as descrições de experiência e projetos utilizando a estrutura: "Realizei [Ação/Projeto] medido por [Métrica/Impacto] utilizando [Tecnologias ATS]". 
+    4. FORMATAÇÃO CLEAN PARA ATS: Use APENAS cabeçalhos (H1, H2, H3), textos simples e bullet points clássicos (- ou *). NUNCA use tabelas ou caracteres complexos.
+    5. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque em destacar as habilidades e experiências que provam que o candidato é apto para a vaga, sem mencionar níveis de senioridade.
 
-    REGRA DE OURO: Jamais invente ferramentas, graduações ou cargos ausentes no CONTEÚDO_BASE. Você tem permissão APENAS para traduzir, omitir o nível júnior e reescrever estrategicamente.
+    REGRAS DE ESTRATÉGIA ATS (EVITAR KEYWORD STUFFING E GAPS):
+    1. TRADUÇÃO DE HABILIDADES TRANSFERÍVEIS: Se a vaga pedir ferramentas específicas que não estão no CONTEÚDO_BASE, NÃO minta. Reescreva a experiência destacando as bases técnicas que provam que o candidato pode aprender essas ferramentas rápido.
+    2. PROIBIÇÃO DE 'KEYWORD STUFFING': Não crie listas de "Skills" com palavras da vaga que não estejam justificadas nas experiências profissionais com a Fórmula XYZ.
+    3. SINCERIDADE ESTRATÉGICA: Se a vaga exige níveis específicos de idiomas (ex: Inglês C1), mantenha o nível real do candidato, mas adicione contexto de uso prático (ex: "Leitura técnica avançada").
+    4. FOCO NO DOMÍNIO DA VAGA: Reduza o destaque de projetos acadêmicos e foque na arquitetura técnica que mais se assemelha à vaga.
     """
+)
+
+agente_juiz_ats = Agent(
+    name="Juiz de ATS",
+    model=MODEL_OLLAMA_QWEN2, # Modelos locais são ótimos para isso
+    description="Avalia matematicamente a similaridade entre o CV gerado e a vaga.",
+    instructions="""Você é o guardião da qualidade. 
+    1. Receba o currículo redigido pelo Redator e a Descrição original da Vaga.
+    2. Acione a ferramenta `ferramenta_avaliar_score_ats` para obter a nota matemática.
+    3. Se o feedback da ferramenta for REPROVADO ou MEDIANO, ordene que o Redator refaça o trabalho.
+    4. Se for APROVADO, libere o texto para o agente Copia e Cola.""",
+    tools=[tool_avaliar_score_ats]
 )
 
 agente_copia_cola = Agent(
     name="Copia e Cola",
-    model=MODEL_GPT_OPEN,
+    model=MODEL_OLLAMA_QWEN2,
     description="Agente intermediário para passar o nome do arquivo Markdown do Redator para o Conversor.",
     instructions=f"""Você tem UMA única responsabilidade: receber o texto reescrito do Redator e salvar usando a ferramenta.
 
@@ -99,7 +113,7 @@ agente_copia_cola = Agent(
 
 agente_conversor = Agent(
     name="Conversor de CV",
-    model=MODEL_GPT_OPEN,
+    model=MODEL_OLLAMA_QWEN2,
     description="Converte o arquivo Markdown otimizado em PDF final.",
     instructions="""Você tem UMA única responsabilidade: converter o arquivo Markdown em PDF.
 
@@ -116,7 +130,7 @@ agente_conversor = Agent(
 
 agente_envio = Agent(
     name = "Agente de Envio de Candidatura",
-    model = MODEL_GPT_OPEN,
+    model = MODEL_OLLAMA_QWEN2,
     description = "Agente responsável por enviar o currículo otimizado para a vaga usando automação de navegador.",
     instructions = f"""Você tem UMA única responsabilidade: enviar o currículo otimizado para a vaga usando a ferramenta de automação de navegador.
     PASSOS OBRIGATÓRIOS:
@@ -152,20 +166,52 @@ def pipeline_cv(termos_ats: list) -> str:
 
         # ETAPA 2: Redação otimizada
         print("\n[3/5] Reescrevendo CV para ATS...")
-        prompt_redacao = f"""
-            VAGA_ORIGINAL (Use para detectar o idioma alvo!):
-            {termo['descricao'][:1500]}...
 
-            CONTEÚDO_BASE:
-            {conteudo_base}
+        ats_satisfeito = False
+        resultado_redacao = ""
+        feedback_do_juiz = "" 
+        
+        # Extrai as listas do objeto Pydantic
+        palavras_chave_vaga = resultado_ats.content.technical_terms + resultado_ats.content.desejaveis
+        termos_formatados = ", ".join(palavras_chave_vaga) # Transforma em texto para o Redator ler
 
-            TERMOS_ATS:
-            {resultado_ats.content}
+        while not ats_satisfeito:
+            prompt_redacao = f"""
+                VAGA_ORIGINAL:
+                {termo['descricao']}
 
-            Reescreva o currículo seguindo suas instruções e salve o arquivo.
-            """
-        resultado_redacao = agente_redator.run(prompt_redacao)
-        redacao = extrair_bloco_markdown(resultado_redacao.content)  # Limpa o output para pegar só o markdown
+                CONTEÚDO_BASE:
+                {conteudo_base}
+
+                TERMOS_ATS EXIGIDOS:
+                {termos_formatados}
+                """
+            
+            if feedback_do_juiz:
+                prompt_redacao += f"\n\nATENÇÃO! A sua versão anterior foi reprovada pelo algoritmo de ATS. Corrija o currículo baseado neste feedback crítico:\n{feedback_do_juiz}"
+
+            # 1. Redator tenta escrever
+            resposta_redacao = agente_redator.run(prompt_redacao)
+            texto_cv_gerado = resposta_redacao.content
+
+            # 2. Avaliação Matemática (passando a lista diretamente!)
+            resultado_matematico = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=palavras_chave_vaga)
+            
+            print("\n📊 --- RESULTADO DO ALGORITMO ATS ---")
+            print(resultado_matematico)
+            print("------------------------------------\n")
+
+            # 3. Verifica o veredito
+            if "REPROVADA" in resultado_matematico or "MEDIANO" in resultado_matematico:
+                print(f"⚠️ O Redator não atingiu o Score necessário. A reiniciar tentativa...")
+                feedback_do_juiz = resultado_matematico 
+            else:
+                print("✅ O currículo atingiu o Score exigido! A prosseguir...")
+                resultado_redacao = texto_cv_gerado 
+                ats_satisfeito = True
+
+
+        redacao = extrair_bloco_markdown(resultado_redacao)  # Limpa o output para pegar só o markdown
 
         resultado_md = agente_copia_cola.run(f"Pegue o nome da vaga {termo['titulo']} e o conteúdo {redacao}")
         pprint_run_response(resultado_md)

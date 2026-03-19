@@ -20,4 +20,6 @@ dependencies = [
     "pdf2docx>=0.5.11",
     "playwright>=1.58.0",
     "pypdf>=6.8.0",
+    "scikit-learn>=1.8.0",
+    "spacy>=3.8.11",
 ]
