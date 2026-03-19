@@ -15,77 +15,11 @@ from src.tools.playwright_tool import buscar_multiplas_vagas, tool_envio_candida
 # Importando o novo arsenal de ferramentas
 from src.tools.cv_tool import ler_cv_base_md, salvar_cv_otimizado_md, converter_md_para_pdf
 
-support_format_cv = [
-    Message(role="system", content="""
-###LUCAS ABNER CAIXETA DE OLIVEIRA
-
-Campinas, SP  | lucascaixeta02@gmail.com | (11) 96013-6292 
-LinkedIn: www.linkedin.com/in/lucas-abner-caixeta/ | GitHub: github.com/lucas-abner 
-AI Engineer Júnior | IA Generativa | LLMs | Agentes (LangChain/CrewAI) | Python
-
-**RESUMO PROFISSIONAL**  
-            
-Junior AI Engineer com forte foco em Inteligência Artificial Generativa e construção de aplicações inteligentes. Experiência prática no desenvolvimento end-to-end de soluções utilizando LLMs, sistemas multi-agentes (CrewAI, LangChain) e arquiteturas RAG. Vivência no consumo e criação de APIs RESTful utilizando FastAPI, conectando modelos de IA com fluxos de back-end no mundo real. Apaixonado por explorar novos frameworks e construir assistentes que automatizam processos e executam tarefas complexas , com facilidade para leitura de documentação técnica em inglês.
-
-**HABILIDADES TÉCNICAS**
-
-    IA Generativa & LLMs: Modelos fundacionais (ChatGPT, Claude, Gemini, Ollama, Llama.cpp, MedGemma), Fine-tuning, RAG.
-
-    Frameworks de IA: LangChain, CrewAI, Agno.
-
-    Engenharia de Software & Web: Python, FastAPI (APIs REST), consumo de APIs externas, Docker, SQL, Git, Linux.
-
-    Machine Learning: Scikit-learn, Pandas, NumPy, Deep Learning.
-
-**EXPERIÊNCIA PROFISSIONAL**  
-
-Estagiário em Biologia Computacional | Campinas, SP Fevereiro 2025 – Atual
-
-    Desenvolvimento de assistentes e agentes de IA utilizando Python para a automação de processos internos e execução de tarefas reais.
-
-    Implementação e orquestração de LLMs locais (Ollama, Llama.cpp) em ambientes HPC, garantindo autonomia, controle de dados e redução de custos com APIs externas.
-
-    Integração de modelos preditivos (Machine Learning e Deep Learning) aplicados a cenários biológicos de alta complexidade.
-
-    Criação de pipelines de dados e APIs escaláveis utilizando FastAPI para servir os modelos desenvolvidos.
-
-**PROJETOS EM DESTAQUE**  
-
-Projeto Med-Crew | Análise de Imagens com Agentes * Desenvolvimento de uma aplicação em Python utilizando a arquitetura multi-agente CrewAI e o modelo MedGemma para análise inteligente de imagens de raio-X.
-
-    Destaque: Participação no "The MedGemma Impact Challenge" no Kaggle, consolidando conhecimentos práticos na aplicação de LLMs open-weight de ponta.
-
-Agente de IA para Análise de Dados e Predição | github.com/Lucas-Abner/agent_ml_analityc 
-
-    Construção de um pipeline completo de back-end para análise de dados utilizando arquitetura multi-agent com CrewAI.
-
-    Implementação de modelos preditivos clássicos (Random Forest, Regressão Linear, Logística e SVM) integrados ao fluxo de decisão do agente de IA.
-
-**FORMAÇÃO**
-
-Tecnologia em Inteligência Artificial e Machine Learning 
-UniCesumar | 2024 – Atual 
-
-**CERTIFICAÇÕES**
-
-    LLM Engineering – Udemy 
-
-    Agentic AI Engineering – Udemy 
-
-    Pós-treinamento de LLMs – DeepLearning.AI 
-
-**IDIOMAS**
-
-    Português: Nativo 
-
-    Inglês: Intermediário (Foco em leitura técnica avançada)
-""".strip()
-    )
-]
-
 MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
-MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
-MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:9b", host="http://localhost:11434", options={"temperature": 0.7})  # Configuração para Ollama local
+MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 0})  # Configuração para Ollama local
+MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:9b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 0})  # Configuração para Ollama local
+MODEL_GPT_OPEN = OpenAIResponses(id=os.getenv("MODELO_GPT_OPEN", "openai/gpt-oss-20b"), api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")  # Configuração para GPT-4.1 mini
+
 
 buscar_vagas = os.environ.get("BUSCAR_VAGA", "Agente de IA")
 quantidade_vagas = os.environ.get("QUANTIDADE_VAGAS", 1)  # Recomendado processar 1 por vez para não confundir o modelo local
@@ -99,16 +33,19 @@ vagas_escolhidas = buscar_multiplas_vagas(buscar_vagas, quantidade_vagas)
 
 analista_ats = Agent(
     name="Analista de ATS",
-    model=MODEL_OLLAMA_QWEN2,  # Usando o modelo mais leve para análise de vaga
+    model=MODEL_GPT_OPEN,  # Usando o modelo mais leve para análise de vaga
     description="Analisa descrições de vagas e extrai os termos essenciais.",
-    instructions=f"Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. Extraia as informações de forma ATÔMICA e CURTA (máximo 3 palavras por item). Transforme exigências complexas em tags diretas. Se houver a palavra 'ou', coloque na lista de desejaveis.",
+    instructions=f"""Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. 
+    Extraia as informações de forma ATÔMICA (máximo 2 a 3 palavras por item). 
+    REGRA ATS: Extraia os termos técnicos exatamente como estão escritos na vaga (ex: se diz 'RESTful API', extraia 'RESTful API'). 
+    Transforme exigências complexas em tags diretas. Se houver a palavra 'ou', coloque na lista de desejaveis.""",
     expected_output="Gere o output estritamente preenchendo o schema de technical_terms, soft_skills e desejaveis.",
     output_schema=ATSExtract
 )
 
 agente_leitor = Agent(
     name="Leitor de CV",
-    model=MODEL_OLLAMA_QWEN3,
+    model=MODEL_GPT_OPEN,
     description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
     instructions="""Você tem UMA única responsabilidade: recuperar o conteúdo do currículo base.
 
@@ -125,34 +62,29 @@ agente_leitor = Agent(
 agente_redator = Agent(
     name="Redator de CV",
     model=MODEL_GPT,
-    description="Reescreve o currículo em Markdown otimizado para ATS e salva o arquivo.",
-    instructions=f"""Você recebe dois insumos via prompt:
-    - CONTEÚDO_BASE: o currículo original do candidato (fornecido pelo Leitor de CV).
-    - TERMOS_ATS: palavras-chave extraídas da vaga.
+    description="Reescreve o currículo em Markdown otimizado para leitura de robôs ATS, adaptando idioma e neutralizando senioridade.",
+    instructions=f"""Você recebe três insumos via prompt:
+    - VAGA_ORIGINAL: a descrição da vaga (para você detectar o idioma).
+    - CONTEÚDO_BASE: o currículo original do candidato.
+    - TERMOS_ATS: palavras-chave extraídas.
 
-    PASSOS OBRIGATÓRIOS:
-    1. Leia o CONTEÚDO_BASE com atenção. Esse é o único histórico real do candidato.
-    2. Cruze o resumo profissional, habilidades técnicas e a experiência do candidato com os TERMOS_ATS.
-    3. Reescreva o currículo aplicando as técnicas de otimização para ATS, garantindo que os termos extraídos sejam incorporados de forma natural e estratégica:
-       - Técnica XYZ no resumo profissional para destacar as palavras-chave.
-       - Técnica XYZ na seção de habilidades técnicas para alinhar com os termos ATS.
-       - Técnica XYZ nas descrições de experiência (Realizei X medido por Y fazendo Z).
-       - Técnica XYZ para destacar projetos em destaque.
-       - Insira os termos ATS de forma natural onde houver correspondência real.
-    4. REGRA DE OURO: Jamais invente ferramentas, graduações ou cargos ausentes no
-       CONTEÚDO_BASE. Se precisar de seções novas, use apenas títulos genéricos como
-       "EXPERIÊNCIA ADICIONAL" ou "FORMAÇÃO COMPLEMENTAR".
-       Títulos em UPPERCASE → converta o Nome para H3 e o restante para Negrito Markdown.
-       Não adicione mais nada além do necessário. Zero criatividade extra. Sua missão é reescrever, não analisar ou comentar.
-       Escolha apenas um formato de estruturação do curriculo (ex: se escolher virgula para separar skills, mantenha esse formato para todas as skills, não misture virgula com bullet points ou outros formatos).
-    """,
-    additional_input=support_format_cv,
-    # tools=[salvar_cv_otimizado_md],
+    PASSOS OBRIGATÓRIOS PARA OTIMIZAÇÃO ATS:
+    1. ESPELHAMENTO DE IDIOMA (CRÍTICO): Leia a VAGA_ORIGINAL. Se a vaga estiver em INGLÊS, traduza TODO o currículo base para um INGLÊS impecável. Mude os títulos para "SUMMARY", "EXPERIENCE", "SKILLS", "PROJECTS". Nunca gere um CV em português para uma vaga gringa.
+    2. NEUTRALIZAÇÃO DE SENIORIDADE: Remova TODAS as menções à palavra "Júnior", "Junior", "Trainee" ou "Estagiário". 
+       - No topo do CV, use apenas "AI Engineer".
+       - Troque o cargo "Estagiário em Biologia Computacional" por "Computational Biology AI Developer" (ou equivalente no idioma da vaga).
+    3. MATCH EXATO DE PALAVRAS-CHAVE: Incorpore os TERMOS_ATS de forma natural. Se a vaga pede "AWS", escreva "AWS".
+    4. FÓRMULA XYZ NA EXPERIÊNCIA: Reescreva as descrições de experiência e projetos com a estrutura: "Realizei [Ação/Projeto] medido por [Métrica/Impacto] utilizando [Tecnologias ATS]". 
+    5. FORMATAÇÃO CLEAN PARA ATS: 
+       - Use APENAS cabeçalhos Markdown simples (H1, H2, H3) e bullet points clássicos (- ou *).
+
+    REGRA DE OURO: Jamais invente ferramentas, graduações ou cargos ausentes no CONTEÚDO_BASE. Você tem permissão APENAS para traduzir, omitir o nível júnior e reescrever estrategicamente.
+    """
 )
 
 agente_copia_cola = Agent(
     name="Copia e Cola",
-    model=MODEL_OLLAMA_QWEN3,
+    model=MODEL_GPT_OPEN,
     description="Agente intermediário para passar o nome do arquivo Markdown do Redator para o Conversor.",
     instructions=f"""Você tem UMA única responsabilidade: receber o texto reescrito do Redator e salvar usando a ferramenta.
 
@@ -167,7 +99,7 @@ agente_copia_cola = Agent(
 
 agente_conversor = Agent(
     name="Conversor de CV",
-    model=MODEL_OLLAMA_QWEN2,
+    model=MODEL_GPT_OPEN,
     description="Converte o arquivo Markdown otimizado em PDF final.",
     instructions="""Você tem UMA única responsabilidade: converter o arquivo Markdown em PDF.
 
@@ -184,7 +116,7 @@ agente_conversor = Agent(
 
 agente_envio = Agent(
     name = "Agente de Envio de Candidatura",
-    model = MODEL_OLLAMA_QWEN2,
+    model = MODEL_GPT_OPEN,
     description = "Agente responsável por enviar o currículo otimizado para a vaga usando automação de navegador.",
     instructions = f"""Você tem UMA única responsabilidade: enviar o currículo otimizado para a vaga usando a ferramenta de automação de navegador.
     PASSOS OBRIGATÓRIOS:
@@ -221,6 +153,9 @@ def pipeline_cv(termos_ats: list) -> str:
         # ETAPA 2: Redação otimizada
         print("\n[3/5] Reescrevendo CV para ATS...")
         prompt_redacao = f"""
+            VAGA_ORIGINAL (Use para detectar o idioma alvo!):
+            {termo['descricao'][:1500]}...
+
             CONTEÚDO_BASE:
             {conteudo_base}
 
@@ -229,7 +164,7 @@ def pipeline_cv(termos_ats: list) -> str:
 
             Reescreva o currículo seguindo suas instruções e salve o arquivo.
             """
-        resultado_redacao = agente_redator.run(prompt_redacao)  
+        resultado_redacao = agente_redator.run(prompt_redacao)
         redacao = extrair_bloco_markdown(resultado_redacao.content)  # Limpa o output para pegar só o markdown
 
         resultado_md = agente_copia_cola.run(f"Pegue o nome da vaga {termo['titulo']} e o conteúdo {redacao}")

@@ -21,7 +21,7 @@ def ler_cv_base_md() -> str:
 
     conteudo_cv = pdf_md.text_content
 
-    caminho_md = pdf_path.replace(".pdf", ".md") if os.path.exists(pdf_path) else pdf_path2.replace(".pdf", ".md")
+    caminho_md = pdf_path.replace(".pdf", ".md")
     # display(Markdown(f"{caminho_md}"))
 
     with open(caminho_md, "w", encoding="utf-8") as f:
