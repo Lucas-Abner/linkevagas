@@ -37,7 +37,7 @@ analista_ats = Agent(
     description="Analisa descrições de vagas e extrai os termos essenciais.",
     instructions=f"""Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. 
     Extraia as informações de forma ATÔMICA (máximo 2 a 3 palavras por item). 
-    REGRA ATS: Extraia os termos técnicos exatamente como estão escritos na vaga (ex: se diz 'RESTful API', extraia 'RESTful API'). 
+    REGRA ATS: Extraia os termos técnicos exatamente como estão escritos na vaga (ex: se diz 'RESTful API', extraia 'RESTful API')\nEscreva também o titulo da vaga como technical_terms. 
     Transforme exigências complexas em tags diretas. Se houver a palavra 'ou', coloque na lista de desejaveis.""",
     expected_output="Gere o output estritamente preenchendo o schema de technical_terms, soft_skills e desejaveis.",
     output_schema=ATSExtract
