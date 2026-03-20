@@ -13,6 +13,7 @@ dependencies = [
     "langchain-community>=0.4.1",
     "langchain-ollama>=1.0.1",
     "langchain-openai>=1.1.11",
+    "markdown>=3.10.2",
     "markdown-pdf>=1.13.1",
     "markitdown[all]>=0.1.5",
     "ollama>=0.6.1",
@@ -22,4 +23,5 @@ dependencies = [
     "pypdf>=6.8.0",
     "scikit-learn>=1.8.0",
     "spacy>=3.8.11",
+    "weasyprint>=68.1",
 ]

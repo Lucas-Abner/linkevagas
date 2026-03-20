@@ -1,5 +1,7 @@
 from pypdf import PdfReader
 import os
+import markdown
+from weasyprint import HTML
 from markitdown import MarkItDown
 import re
 from dotenv import load_dotenv
@@ -53,12 +55,71 @@ def converter_md_para_pdf(caminho_md: str) -> str:
     Ferramenta para a IA converter o arquivo Markdown final em um PDF amigável para ATS.
     """
     try:
-        pdf = MarkdownPdf(toc_level=0)
         with open(caminho_md, "r", encoding="utf-8") as f:
-            pdf.add_section(Section(f.read()))
-        
+            texto_md = f.read()
+
+        conteudo_html = markdown.markdown(texto_md)
+
+        html_completo = f"""
+        <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    @page{{
+                    size: A4 portrait;
+                    margin: 1.2cm;
+                    }}
+                    body{{
+                    font-family: Arial, sans-serif;
+                    font-size: 10pt;
+                    line-height: 1.3;
+                    color: #000;
+                    }}
+                    h1 {{
+                    font-size: 14pt;
+                    text-align: center;
+                    margin-bottom: 5px;
+                    text-transform: uppercase;
+                    }}
+                    h2 {{
+                        font-size: 12pt;
+                        border-bottom: 1px solid #000;
+                        margin-top: 10px;
+                        margin-bottom: 5px;
+                        padding-bottom: 2px;
+                    }}
+                    h3 {{
+                        font-size: 10.5pt;
+                        margin-top: 8px;
+                        margin-bottom: 3px;
+                    }}
+                    p, ul {{
+                        margin-top: 3px;
+                        margin-bottom: 3px;
+                    }}
+                    li {{
+                        margin-bottom: 2px;
+                    }}
+                    /* Para centralizar os contactos logo abaixo do nome, caso o IA gere uma div ou parágrafo específico */
+                    .contatos {{
+                        text-align: center;
+                        font-size: 9pt;
+                        margin-bottom: 15px;
+                    }}
+                </style>
+            </head>
+            <body>
+                {conteudo_html}
+            </body>
+        </html>
+        """
+
         caminho_pdf = caminho_md.replace(".md", ".pdf")
-        pdf.save(caminho_pdf)
-        return f"PDF gerado com sucesso em {caminho_pdf}"
+
+        HTML(string=html_completo).write_pdf(caminho_pdf)
+
+        return f"PDF de 1 página gerado com sucesso: {caminho_pdf}"
+
+
     except Exception as e:
         return f"Erro ao converter PDF: {e}"

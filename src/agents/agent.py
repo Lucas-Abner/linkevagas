@@ -18,8 +18,8 @@ from src.tools.ats_tool import tool_avaliar_score_ats
 
 
 MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
-MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 25})
-MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:4b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 25})
+MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
+MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:4b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
 MODEL_GPT_OPEN = OpenAIResponses(id=os.getenv("MODELO_GPT_OPEN", "openai/gpt-oss-20b"), api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")  # Configuração para GPT-4.1 mini
 
 
@@ -35,13 +35,56 @@ vagas_escolhidas = buscar_multiplas_vagas(buscar_vagas, quantidade_vagas)
 
 analista_ats = Agent(
     name="Analista de ATS",
-    model=MODEL_GPT,  # Usando o modelo mais leve para análise de vaga
-    description="Analisa descrições de vagas e extrai os termos essenciais.",
-    instructions=f"""Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. 
-    Extraia as informações de forma ATÔMICA (máximo 2 a 3 palavras por item). 
-    REGRA ATS: Extraia os termos técnicos exatamente como estão escritos na vaga (ex: se diz 'RESTful API', extraia 'RESTful API')\nEscreva também o titulo da vaga como technical_terms. 
-    Transforme exigências complexas em tags diretas. Se houver a palavra 'ou', coloque na lista de desejaveis.""",
-    expected_output="Gere o output estritamente preenchendo o schema de technical_terms, soft_skills e desejaveis.",
+    model=MODEL_OLLAMA_QWEN2,
+    description="Extrai palavras-chave de vagas em formato JSON estruturado.",
+    instructions=f"""
+<task>
+Leia o texto da vaga abaixo e extraia palavras-chave para cada categoria do schema JSON.
+A vaga pode estar em português ou inglês. Copie os termos NO IDIOMA ORIGINAL da vaga.
+</task>
+
+<vaga>
+{buscar_vagas}
+</vaga>
+
+<rules>
+REGRA 1 — Pense passo a passo antes de preencher cada campo:
+  (a) Leia toda a vaga uma vez.
+  (b) Para cada termo encontrado, decida em qual categoria ele se encaixa.
+  (c) Preencha o schema apenas com termos que você encontrou no texto.
+
+REGRA 2 — Cada categoria aceita APENAS estes tipos de termos:
+
+  technical_terms → Ferramentas, linguagens, frameworks, plataformas, protocolos.
+    ACEITO: Python, Linux, Bash, REST API, LLMs, Docker, SQL, Git
+    RECUSADO: qualquer frase com verbo (ex: "desenvolver sistemas", "trabalhar com")
+
+  soft_skills → Habilidades comportamentais, mentais ou de comunicação.
+    ACEITO: attention to detail, problem-solving, analytical skills, teamwork
+    RECUSADO: nomes de tecnologias, linguagens ou ferramentas
+
+  desejaveis → Termos das seções "Nice to Have", "Preferred", "Diferencial" ou "Plus".
+    ACEITO: RLHF, SFT, CI/CD, browser automation
+    RECUSADO: requisitos marcados como obrigatórios
+
+REGRA 3 — Formato dos termos:
+  - Entre 1 e 3 palavras por termo.
+  - Sem pontuação extra, sem frases longas.
+  - Se uma categoria não tiver nenhum termo na vaga, retorne lista vazia [].
+</rules>
+
+<output_instructions>
+Retorne APENAS o JSON preenchido, sem texto antes ou depois.
+Não adicione explicações, comentários ou markdown.
+</output_instructions>
+""",
+    expected_output="""JSON válido preenchendo todos os campos do schema ATSExtract.
+Exemplo de saída esperada:
+{
+  "technical_terms": ["Python", "Linux", "REST API"],
+  "soft_skills": ["problem-solving", "attention to detail"],
+  "desejaveis": ["RLHF", "CI/CD"]
+}""",
     output_schema=ATSExtract
 )
 
@@ -86,6 +129,7 @@ agente_redator = Agent(
     4. FOCO NO DOMÍNIO DA VAGA: Reduza o destaque de projetos acadêmicos e foque na arquitetura técnica que mais se assemelha à vaga.
     5. NUNCA, NUNCA MESMO, invente experiências ou habilidades. Se algo não está no CONTEÚDO_BASE, reescreva a experiência mais próxima de forma convincente, mas sem mentir. A honestidade é a melhor política para evitar reprovações por ATS.
     6. MANTENHA A ESSÊNCIA DO CANDIDATO: O objetivo é otimizar o currículo para passar pelo ATS, mas sem perder a autenticidade do candidato. O CV deve parecer uma evolução natural do conteúdo base, não uma versão fabricada.
+    7. REGRA DE TAMANHO (1 PÁGINA): O currículo DEVE obrigatoriamente caber numa única página. Para isso, seja extremamente conciso. Use no máximo 3 a 4 bullet points curtos por experiência. Remova adjetivos desnecessários e vá direto ao ponto métrico. O texto inteiro não deve ultrapassar 350 palavras.
     """
 )
 
@@ -159,7 +203,8 @@ def pipeline_cv(termos_ats: list) -> str:
 
     for _, termo in enumerate(termos_ats):
         print("="*60)
-        print(f"\n[1/5] Analisando a Vaga: {termo['title']}")
+        print(f"\n[1/5] Analisando a Vaga: {termo['title']}\n URL: {termo['url']}")
+        print(f"Breve descrição: {termo['description'][:300]}...\n")
         resultado_ats = analista_ats.run(termo["description"])
         pprint_run_response(resultado_ats)
 

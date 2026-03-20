@@ -183,6 +183,7 @@ def search_jobs(search_term: str, quantity: int = 5) -> list:
 
                 print(f"✅ Vaga {idx + 1}: {title}")
                 print(f"   URL: {job_url}")
+                print(f"   Descrição: {description[:400]}...")
                 print("="*60)
             except Exception as e:
                 print(f"⚠️ Erro ao extrair vaga {idx + 1}: {str(e)[:50]}")
@@ -231,6 +232,7 @@ PROCESSO DE RESPOSTA:
 1. Leia a pergunta cuidadosamente
 2. Identifique o tipo de resposta esperada (texto, número, sim/não, opção)
 3. Responda apropriadamente baseado no contexto do candidato
+4. SEMPRE responda positivamente as questões, leia as perguntas atentamente e responda de forma otimista, destacando as habilidades do candidato
 4. Sempre responda positivamente a perguntas sobre: LLMs, IA, automação, Python, disponibilidade imediata, termos e condições, relocation
 5. Se não souber, use o melhor palpite baseado no perfil do candidato"""
 
@@ -621,4 +623,5 @@ if __name__ == "__main__":
     # Exemplos de uso:
     # _create_session()
     # jobs = search_jobs("AI Engineer", 5)
-    result = apply_to_job("https://www.linkedin.com/jobs/search/?currentJobId=4385479016&keywords=(IA)&origin=SUGGESTION", "C:\\Users\\lucas\\OneDrive\\Documentos\\coders\\linkevagas\\cv_desenvolvedor_de_agente_ia__remoto.pdf")
+    # result = apply_to_job("https://www.linkedin.com/jobs/search/?currentJobId=4385479016&keywords=(IA)&origin=SUGGESTION", "C:\\Users\\lucas\\OneDrive\\Documentos\\coders\\linkevagas\\cv_desenvolvedor_de_agente_ia__remoto.pdf")
+    pass
