@@ -18,8 +18,8 @@ from src.tools.ats_tool import tool_avaliar_score_ats
 
 
 MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
-MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 0})  # Configuração para Ollama local
-MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:9b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 0})  # Configuração para Ollama local
+MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 25})
+MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:4b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 25})
 MODEL_GPT_OPEN = OpenAIResponses(id=os.getenv("MODELO_GPT_OPEN", "openai/gpt-oss-20b"), api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")  # Configuração para GPT-4.1 mini
 
 
@@ -35,7 +35,7 @@ vagas_escolhidas = buscar_multiplas_vagas(buscar_vagas, quantidade_vagas)
 
 analista_ats = Agent(
     name="Analista de ATS",
-    model=MODEL_OLLAMA_QWEN2,  # Usando o modelo mais leve para análise de vaga
+    model=MODEL_GPT,  # Usando o modelo mais leve para análise de vaga
     description="Analisa descrições de vagas e extrai os termos essenciais.",
     instructions=f"""Você é um algoritmo de ATS extraindo dados de vagas de {buscar_vagas}. 
     Extraia as informações de forma ATÔMICA (máximo 2 a 3 palavras por item). 
@@ -73,14 +73,19 @@ agente_redator = Agent(
     1. MATCH EXATO DE PALAVRAS-CHAVE: Ao adicionar ferramentas aos requisitos, use a grafia EXATA extraída pela análise da vaga.
     2. RESUMO PROFISSIONAL: Incorpore os termos técnicos e soft skills mais importantes da vaga de forma natural nas três primeiras linhas.
     3. FÓRMULA XYZ NA EXPERIÊNCIA: Reescreva as descrições de experiência e projetos utilizando a estrutura: "Realizei [Ação/Projeto] medido por [Métrica/Impacto] utilizando [Tecnologias ATS]". 
-    4. FORMATAÇÃO CLEAN PARA ATS: Use APENAS cabeçalhos (H1, H2, H3), textos simples e bullet points clássicos (- ou *). NUNCA use tabelas ou caracteres complexos.
+    4. FORMATAÇÃO CLEAN PARA ATS: Use APENAS cabeçalhos (H3 e Negrito), textos simples e bullet points clássicos (- ou *). NUNCA use tabelas ou caracteres complexos.
     5. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque em destacar as habilidades e experiências que provam que o candidato é apto para a vaga, sem mencionar níveis de senioridade.
+    6. ADICIONE VALOR: Mostre que os projetos e experiências trouxeram resultados concretos, usando números e métricas sempre que possível. Isso é mais importante do que simplesmente listar responsabilidades.
+    7. FALE A MESMA LINGUAGEM DA VAGA: Se a vaga enfatiza certas habilidades ou termos, certifique-se de que eles estejam presentes no currículo de forma natural. O objetivo é passar pelo filtro do ATS, então a correspondência de palavras-chave é crucial.
+    8. NÃO SE ESQUEÇA: Eu sou homem, então use pronomes masculinos. Mantenha a essência do meu perfil, mas otimize para a vaga.
 
     REGRAS DE ESTRATÉGIA ATS (EVITAR KEYWORD STUFFING E GAPS):
     1. TRADUÇÃO DE HABILIDADES TRANSFERÍVEIS: Se a vaga pedir ferramentas específicas que não estão no CONTEÚDO_BASE, NÃO minta. Reescreva a experiência destacando as bases técnicas que provam que o candidato pode aprender essas ferramentas rápido.
     2. PROIBIÇÃO DE 'KEYWORD STUFFING': Não crie listas de "Skills" com palavras da vaga que não estejam justificadas nas experiências profissionais com a Fórmula XYZ.
     3. SINCERIDADE ESTRATÉGICA: Se a vaga exige níveis específicos de idiomas (ex: Inglês C1), mantenha o nível real do candidato, mas adicione contexto de uso prático (ex: "Leitura técnica avançada").
     4. FOCO NO DOMÍNIO DA VAGA: Reduza o destaque de projetos acadêmicos e foque na arquitetura técnica que mais se assemelha à vaga.
+    5. NUNCA, NUNCA MESMO, invente experiências ou habilidades. Se algo não está no CONTEÚDO_BASE, reescreva a experiência mais próxima de forma convincente, mas sem mentir. A honestidade é a melhor política para evitar reprovações por ATS.
+    6. MANTENHA A ESSÊNCIA DO CANDIDATO: O objetivo é otimizar o currículo para passar pelo ATS, mas sem perder a autenticidade do candidato. O CV deve parecer uma evolução natural do conteúdo base, não uma versão fabricada.
     """
 )
 
@@ -154,8 +159,8 @@ def pipeline_cv(termos_ats: list) -> str:
 
     for _, termo in enumerate(termos_ats):
         print("="*60)
-        print(f"\n[1/5] Analisando a Vaga: {termo['titulo']}")
-        resultado_ats = analista_ats.run(termo["descricao"])
+        print(f"\n[1/5] Analisando a Vaga: {termo['title']}")
+        resultado_ats = analista_ats.run(termo["description"])
         pprint_run_response(resultado_ats)
 
         print("\n[2/5] Acionando o Agente Redator...")
@@ -178,7 +183,7 @@ def pipeline_cv(termos_ats: list) -> str:
         while not ats_satisfeito:
             prompt_redacao = f"""
                 VAGA_ORIGINAL:
-                {termo['descricao']}
+                {termo['description']}
 
                 CONTEÚDO_BASE:
                 {conteudo_base}
@@ -213,7 +218,7 @@ def pipeline_cv(termos_ats: list) -> str:
 
         redacao = extrair_bloco_markdown(resultado_redacao)  # Limpa o output para pegar só o markdown
 
-        resultado_md = agente_copia_cola.run(f"Pegue o nome da vaga {termo['titulo']} e o conteúdo {redacao}")
+        resultado_md = agente_copia_cola.run(f"Pegue o nome da vaga {termo['title']} e o conteúdo {redacao}")
         pprint_run_response(resultado_md)
         nome_arquivo = resultado_md.content  # ex: "cv_otimizado.md"
 

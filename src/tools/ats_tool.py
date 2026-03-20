@@ -37,7 +37,7 @@ def tool_avaliar_score_ats(cv_text: str, keywords: list) -> str:
     if score_porcentagem < 60:
          print(f"DEBUG: Score BAIXO - Faltam: {faltantes}")
          feedback += f"AVALIAÇÃO REPROVADA. O currículo ignorou muitas ferramentas vitais. \nTermos OBRIGATÓRIOS que ESQUECEU de incluir: {', '.join(faltantes)}. \nRefaça o currículo inserindo estas palavras nas experiências."
-    elif score_porcentagem < 80:
+    elif score_porcentagem < 90:
          print(f"DEBUG: Score MEDIANO - Faltam: {faltantes}")
          feedback += f"AVALIAÇÃO MEDIANA. Quase lá. \nAinda faltam as seguintes palavras-chave: {', '.join(faltantes)}. \nIncorpore-as de forma natural no texto."
     else:

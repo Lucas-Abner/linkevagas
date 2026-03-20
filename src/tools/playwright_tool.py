@@ -1,7 +1,5 @@
 from playwright.sync_api import sync_playwright
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 import json
 import time
@@ -12,8 +10,15 @@ from dotenv import load_dotenv
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
 
-def sessao_esta_valida() -> bool:
-    """Verifica se o arquivo de sessão existe e se o cookie li_at não expirou."""
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNÇÃO 1: Validar e Gerenciar Sessão
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _validate_session() -> bool:
+    """
+    Valida se a sessão do LinkedIn existe e é válida.
+    Se inválida, oferece opção de fazer login novamente.
+    """
     try:
         with open("linkedin_session.json", "r") as f:
             session = json.load(f)
@@ -25,6 +30,7 @@ def sessao_esta_valida() -> bool:
                 if expires != -1 and expires < agora:
                     print("❌ Cookie li_at expirado.")
                     return False
+                print("✅ Sessão válida!")
                 return True
         
         print("❌ Cookie li_at não encontrado.")
@@ -34,30 +40,34 @@ def sessao_esta_valida() -> bool:
         print("❌ Arquivo de sessão não encontrado ou corrompido.")
         return False
 
-def gerar_sessao_linkedin():
-    """Abre o browser para o usuário fazer login e salva a sessão."""
+
+def _create_session():
+    """Cria uma nova sessão do LinkedIn automaticamente ou manualmente."""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False)
         context = browser.new_context()
         page = context.new_page()
 
         page.goto("https://www.linkedin.com/login")
-        print("⏳ Fazendo login no LinkedIn com credenciais do .env...")
+        print("⏳ Fazendo login no LinkedIn...")
         
-        # Lê credenciais do .env
         email = os.getenv("LINKEDIN_EMAIL")
         password = os.getenv("LINKEDIN_PASSWORD")
 
         if email and password:
-            login = page.locator("input[name='session_key']")
-            login.fill(email)
-            senha = page.locator("input[name='session_password']")
-            senha.fill(password)
-            page.locator("button[type='submit']").click()
-            print("🔑 Login realizado com credenciais do .env")
-            page.wait_for_timeout(5000)  # Espera 5 segundos para garantir que o login foi processado
+            try:
+                login = page.locator("input[name='session_key']")
+                login.fill(email)
+                senha = page.locator("input[name='session_password']")
+                senha.fill(password)
+                page.locator("button[type='submit']").click()
+                print("🔑 Login com credenciais do .env")
+                page.wait_for_timeout(5000)
+            except Exception as e:
+                print(f"⚠️ Erro ao fazer login automático: {e}")
+                print("ℹ️ Faça login manualmente...")
+                page.pause()
         else:
-            print("⚠️ LINKEDIN_EMAIL ou LINKEDIN_PASSWORD não configurados no .env")
             print("ℹ️ Faça login manualmente no navegador que se abriu...")
             page.pause()
 
@@ -65,689 +75,550 @@ def gerar_sessao_linkedin():
         print("✅ Sessão do LinkedIn salva com sucesso!")
         browser.close()
 
-def buscar_multiplas_vagas(termo_pesquisa: str, quantidade_vagas=1):
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNÇÃO 2: Buscar Múltiplas Vagas
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def search_jobs(search_term: str, quantity: int = 5) -> list:
     """
-    Ferramenta para a IA buscar múltiplas vagas no LinkedIn com base em um termo de pesquisa, utilizando a sessão autenticada previamente salva. A IA deve ser capaz de extrair o título, descrição e URL de cada vaga encontrada, garantindo que as informações sejam relevantes e atualizadas.
-
-        1. A IA deve navegar até a página de busca de vagas do LinkedIn utilizando o termo de pesquisa fornecido.
-        2. Extrair o título, descrição e URL das vagas listadas na página de resultados.
-        3. Armazenar as informações extraídas em uma estrutura organizada (ex: lista de dicionários).
-        4. Retornar as informações das vagas encontradas para uso posterior no processo de otimização e candidatura.
-
-        Observação: A IA deve ser capaz de lidar com variações na estrutura das páginas de resultados do LinkedIn, garantindo que a extração das informações seja realizada de forma robusta e eficiente.
+    Busca múltiplas vagas no LinkedIn baseado em um termo de pesquisa.
+    
+    Args:
+        search_term: Termo de busca (ex: "AI Engineer")
+        quantity: Quantidade de vagas a extrair
+        
+    Returns:
+        Lista de vagas com título, descrição e URL
     """
+    if not _validate_session():
+        print("⚠️ Sessão inválida. Criando nova...")
+        _create_session()
 
-    # Verifica sessão ANTES de abrir o browser
-    if not sessao_esta_valida():
-        print("⚠️  Sessão inválida. Iniciando autenticação...")
-        gerar_sessao_linkedin()
-
-    caixa_vagas = []
-    quantidade_vagas = int(quantidade_vagas) if isinstance(quantidade_vagas, str) and quantidade_vagas.isdigit() else 5
+    jobs_list = []
+    quantity = int(quantity) if isinstance(quantity, str) and quantity.isdigit() else 5
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 
-        termo_pesquisa = termo_pesquisa.replace(" ", "%20")
-        url_busca = f"https://www.linkedin.com/jobs/search/?currentJobId=4382594108&f_AL=true&f_E=2%2C3&geoId=106057199&keywords={termo_pesquisa}"
+        search_term_encoded = search_term.replace(" ", "%20")
+        search_url = f"https://www.linkedin.com/jobs/search/?keywords={search_term_encoded}&f_AL=true"
 
-        print(f"Buscando vagas para o termo: {url_busca}")
-        page.goto(url_busca)
+        print(f"🔍 Buscando vagas: {search_term}")
+        page.goto(search_url)
 
-        # Verifica se foi redirecionado para o login (sessão expirada)
-        if "linkedin.com/login" in page.url or "linkedin.com/checkpoint" in page.url:
+        if "linkedin.com/login" in page.url:
             browser.close()
-            raise Exception("Sessão do LinkedIn expirada. Execute gerar_sessao_linkedin() para renovar.")
+            raise Exception("Sessão expirada. Crie uma nova com _create_session()")
 
-        # Tenta seletores alternativos (o LinkedIn muda a estrutura HTML com frequência)
-        seletores = [
+        # Detecta seletor de vagas
+        selectors = [
             ".scaffold-layout__list-item",
             "li[data-occludable-job-id]",
             ".jobs-search-results__list-item",
             ".job-card-container",
         ]
-        seletor_ativo = None
-        for seletor in seletores:
+        
+        active_selector = None
+        for selector in selectors:
             try:
-                page.wait_for_selector(seletor, timeout=10000)
-                seletor_ativo = seletor
-                print(f"Seletor encontrado: {seletor_ativo}")
+                page.wait_for_selector(selector, timeout=5000)
+                active_selector = selector
                 break
-            except Exception:
+            except:
                 continue
 
-        if not seletor_ativo:
-            # Tira um screenshot para debug e encerra
+        if not active_selector:
             page.screenshot(path="debug_linkedin.png")
             browser.close()
-            raise Exception("Nenhum seletor de vagas encontrado. Verifique 'debug_linkedin.png' para inspecionar a página.")
+            raise Exception("Seletor de vagas não encontrado")
 
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(1500)
+        total_jobs = page.locator(active_selector).count()
+        quantity = min(quantity, total_jobs)
 
-        total_vagas = page.locator(seletor_ativo).count()
+        print(f"Encontradas {total_jobs} vagas. Extraindo {quantity}...")
 
-        quantidade_encontradas = min(quantidade_vagas, total_vagas)
-
-        print(f"Total da contagem: {quantidade_encontradas}")
-        print(f"Encontradas {total_vagas} vagas. Extraindo as {quantidade_encontradas} primeiras...")
-
-        indice_atual = 0
-
-        while len(caixa_vagas) < quantidade_encontradas and indice_atual < total_vagas:
-
-            page.wait_for_selector(seletor_ativo)
-            page.wait_for_timeout(500)
-
-            cards = page.locator(seletor_ativo)
-            card = cards.nth(indice_atual)
-
+        for idx in range(quantity):
             try:
-                card.scroll_into_view_if_needed(timeout=5000)
-            except Exception:
-                # Se o elemento não estiver disponível, espera mais e tenta novamente
-                page.wait_for_timeout(1000)
-                cards = page.locator(seletor_ativo)
-                card = cards.nth(indice_atual)
-                card.scroll_into_view_if_needed(timeout=5000)
+                cards = page.locator(active_selector)
+                card = cards.nth(idx)
+                # card.scroll_into_view_if_needed()
+                card.click()
+                page.wait_for_timeout(1500)
 
-            card.click()
-            page.wait_for_timeout(2000)
+                apply_buttons_selectors = [
+                    ".jobs-apply-button--top-card",
+                    "button[aria-label*='Apply']",
+                    "button[aria-label*='apply']",
+                    "button:has-text('Easy Apply')",
+                    ".jobs-apply-button",
+                ]
 
-            try:
-                page.wait_for_selector(".jobs-apply-button--top-card", timeout=5000)
-            except Exception:
-                print("Botão de candidatura não encontrado. Pular para proxima vaga.")
-                indice_atual += 1
+                button_found = False
+
+                for btn in apply_buttons_selectors:
+                    if page.locator(btn).count() > 0:
+                        button_found = True
+                        break
+                
+                if not button_found:
+                    print(f"⚠️ Botão de candidatura não encontrado para vaga {idx + 1}")
+                    continue
+
+                job_url = page.url
+                
+                title_elem = page.locator(".job-details-jobs-unified-top-card__job-title")
+                title = title_elem.inner_text() if title_elem.count() > 0 else "N/A"
+
+                desc_elem = page.locator("#job-details")
+                description = desc_elem.inner_text() if desc_elem.count() > 0 else ""
+
+                jobs_list.append({
+                    "title": title,
+                    "description": description[:500],
+                    "url": job_url
+                })
+
+                print(f"✅ Vaga {idx + 1}: {title}")
+                print(f"   URL: {job_url}")
+                print("="*60)
+            except Exception as e:
+                print(f"⚠️ Erro ao extrair vaga {idx + 1}: {str(e)[:50]}")
                 continue
 
-            url_vaga = page.url
-
-            page.wait_for_timeout(2000)
-            page.wait_for_selector("#job-details", timeout=10000)
-
-            titulo_locator = page.locator(".job-details-jobs-unified-top-card__job-title")
-            titulo = titulo_locator.inner_text() if titulo_locator.count() > 0 else "Titulo não encontrado"
-
-            descricao_page = page.locator("#job-details")
-            descricao = descricao_page.inner_text() if descricao_page.count() > 0 else "Descrição não encontrada"
-
-            caixa_vagas.append({
-                "titulo": titulo,
-                "descricao": descricao,
-                "url": url_vaga
-            })
-
-            print(f"Vaga {indice_atual+1} extraída: {titulo}\nURL: {url_vaga}\n{'-'*40}")
-
-            indice_atual += 1
-
         browser.close()
-    return caixa_vagas
 
-def descobrir_e_preencher_todos_campos(modal, page):
+    return jobs_list
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNÇÃO 3: Aplicar para Vaga com LLM Respondendo Tudo
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _get_llm_response(question: str) -> str:
     """
-    Descobre TODOS os campos disponíveis no formulário (inputs, selects, 
-    checkboxes, textareas) mesmo sem labels, e preenche com LLM.
+    Chama a LLM para obter resposta para qualquer pergunta do formulário.
+    A LLM responde basicamente tudo exceto o CV.
     """
-    respostas_mapeadas = {
-        "python": "2",
-        "rag": "1",
-        "retrieval-augmented": "1",
-        "langchain": "1",
-        "fastapi": "1",
-        "machine learning": "1",
-        "deep learning": "1",
-        "clt": "Yes",
-        "salarial" : "5000",
-        "pretensao" : "5000",
-        "pretensão salarial": "5000",
-        "salary": "5000",
-        "aceita": "Yes",
-        "accept": "Yes",
-        "reside": "Yes",
-        "llm": "1",
-        "e-mail": os.getenv("EMAIL"),
-        "english": "1",
-        "inglês": "1",
-        "artificial intelligence": "1",
-        "inteligência artificial": "1",
-        "ultima empresa":"CNPEM",
-        "empresa atual": "CNPEM",
-        "ia": "1",
-        "agentes ia": "1",
-        "disponibilidade para início": "Imediata",
-        "linkedin": os.getenv("LINKEDIN_LINK"),
-        "nome completo": os.getenv("NOME_COMPLETO"),
-        "telefone": os.getenv("TELEFONE")
-    }
-
-    page.wait_for_timeout(1000)
-    campos_processados = set()
-
-    # ═══════════════════════════════════════════════════════════════
-    # 1️⃣ INPUTS DE TEXTO - com ou sem label
-    # ═══════════════════════════════════════════════════════════════
-    print("\n📝 Processando INPUTS DE TEXTO...")
-    inputs = modal.locator("input.artdeco-text-input--input, input[type='text']")
+    chat = ChatOllama(
+        base_url="http://localhost:11434",
+        model="qwen2.5:7b",
+        temperature=0.7
+    )
     
-    for i in range(inputs.count()):
-        inp = inputs.nth(i)
-        input_id = inp.get_attribute("id") or f"input_{i}"
-        
-        if input_id in campos_processados:
-            continue
-        campos_processados.add(input_id)
+    system_prompt = """Você é um assistente especializado em preencher formulários de candidatura do LinkedIn para uma posição de AI Engineer Jr.
 
-        # Tenta encontrar a pergunta de diferentes formas
-        pergunta = extrair_texto_pergunta(modal, inp, input_id)
-        
-        if not pergunta:
-            print(f"  ⏭️  Input {i} sem pergunta detectável. Pulando...")
-            continue
+REGRAS IMPORTANTES:
+- Responda APENAS o valor a ser preenchido, sem explicações ou texto adicional
+- Para checkboxes: responda apenas 'Yes' ou 'No'
+- Para números (salário, experiência): responda SOMENTE números
+- Para dropdowns: responda EXATAMENTE com uma opção disponível
+- Para campos de texto: responda de forma concisa e profissional
 
-        print(f"  Pergunta: {pergunta[:60]}...")
+CONTEXTO DO CANDIDATO:
+- Nome: Lucas Abner Caixeta de Oliveira
+- Email: lucascaixeta02@gmail.com
+- Telefone: 11960136292
+- Localização: Campinas, SP
+- Experiência: IA, Python, Machine Learning, LLMs, Fast API, Agentes IA
+- Disponibilidade: Imediata
+- Gênero: Masculino
+- Salário pretendido: 5000
 
-        valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
-        
-        # Valida que o valor não é vazio ou None
-        if valor and valor.strip():
-            inp.fill(valor.strip())
-            print(f"  ✅ Preenchido com: {valor.strip()}")
-        else:
-            print(f"  ⚠️  Resposta vazia para: {pergunta[:30]}...")
-
-    # ═══════════════════════════════════════════════════════════════
-    # 2️⃣ TEXTAREAS
-    # ═══════════════════════════════════════════════════════════════
-    print("\n📝 Processando TEXTAREAS...")
-    textareas = modal.locator("textarea")
-    
-    for i in range(textareas.count()):
-        ta = textareas.nth(i)
-        ta_id = ta.get_attribute("id") or f"textarea_{i}"
-        
-        if ta_id in campos_processados:
-            continue
-        campos_processados.add(ta_id)
-
-        pergunta = extrair_texto_pergunta(modal, ta, ta_id)
-        
-        if not pergunta:
-            print(f"  ⏭️  Textarea {i} sem pergunta detectável. Pulando...")
-            continue
-
-        print(f"  Pergunta: {pergunta[:60]}...")
-    
-        valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
-        
-        # Valida que o valor não é vazio ou None
-        if valor and valor.strip():
-            ta.fill(valor.strip())
-            print(f"  ✅ Preenchido com: {valor.strip()[:50]}...")
-        else:
-            print(f"  ⚠️  Resposta vazia para: {pergunta[:30]}...")
-
-    # ═══════════════════════════════════════════════════════════════
-    # 3️⃣ DROPDOWNS/SELECTS
-    # ═══════════════════════════════════════════════════════════════
-    print("\n🔽 Processando DROPDOWNS...")
-    selects = modal.locator("select")
-    
-    for i in range(selects.count()):
-        sel = selects.nth(i)
-        sel_id = sel.get_attribute("id") or f"select_{i}"
-        
-        if sel_id in campos_processados:
-            continue
-        campos_processados.add(sel_id)
-
-        pergunta = extrair_texto_pergunta(modal, sel, sel_id)
-        
-        if not pergunta:
-            print(f"  ⏭️  Select {i} sem pergunta detectável. Pulando...")
-            continue
-
-        print(f"  Pergunta: {pergunta[:60]}...")
-
-        opcoes = sel.locator("option").all_inner_texts()
-        opcoes = [op.strip() for op in opcoes if op.strip()]
-
-        valor = None
-        contexto = f"Pergunta: {pergunta}\nOpções: {opcoes}\nEscolha UMA opção exatamente como escrita. Se não souber, escolha a mais próxima ou a primeira opção."
-        valor = resposta_pergunta_llm(contexto, respostas_mapeadas)
-
-        # Encontra a opção que melhor combina
-        opcao_selecionada = None
-        if valor and valor.strip():
-            valor_limpo = valor.strip().lower()
-            for op in opcoes:
-                if valor_limpo in op.lower() or op.lower() in valor_limpo:
-                    opcao_selecionada = op
-                    break
-        
-        opcao_selecionada = opcao_selecionada or opcoes[0]
-        sel.select_option(label=opcao_selecionada)
-        print(f"  ✅ Selecionado: {opcao_selecionada}")
-
-    # ═══════════════════════════════════════════════════════════════
-    # 4️⃣ CHECKBOXES e RADIO BUTTONS
-    # ═══════════════════════════════════════════════════════════════
-    print("\n☑️  Processando CHECKBOXES/RADIO BUTTONS...")
-    checkboxes = modal.locator("input[type='checkbox'], input[type='radio']")
-    
-    for i in range(checkboxes.count()):
-        cb = checkboxes.nth(i)
-        cb_id = cb.get_attribute("id") or f"checkbox_{i}"
-        
-        if cb_id in campos_processados:
-            continue
-        campos_processados.add(cb_id)
-
-        pergunta = extrair_texto_pergunta(modal, cb, cb_id)
-        
-        # IMPORTANTE: NÃO pula se não encontrou pergunta! Faz a LLM responder mesmo assim
-        if not pergunta:
-            print(f"  ⏭️  Checkbox {i} sem pergunta específica detectada. Tentando responder genericamente...")
-            pergunta = f"Checkbox #{i} - Responda 'Yes' para aceitar ou 'No' para recusar."
-
-        print(f"  Pergunta: {pergunta[:60]}...")
-
-        valor = resposta_pergunta_llm(pergunta, respostas_mapeadas)
-
-        # Convert para boolean - valida que valor não é None/vazio
-        deve_marcar = False
-        if valor and valor.strip():
-            deve_marcar = valor.strip().lower() in ["yes", "sim", "true", "1", "aceito", "sim, aceito"]
-        
-        # Verifica o estado atual
-        esta_marcado = False
-        try:
-            esta_marcado = cb.is_checked()
-        except:
-            pass
-        
-        # Só tenta marcar/desmarcar se for diferente do estado atual
-        if deve_marcar == esta_marcado:
-            acao = "já está marcado" if deve_marcar else "já está desmarcado"
-            print(f"  ℹ️  {acao}, pulando")
-            continue
-        
-        try:
-            if deve_marcar:
-                # Tenta clicar na label associada em vez do input direto
-                label = modal.locator(f"label[for='{cb_id}']")
-                if label.count() > 0:
-                    label.click(timeout=5000)
-                    print(f"  ✅ Marcado (via label)")
-                else:
-                    # Se não houver label, tenta clicar no input com force
-                    cb.click(force=True, timeout=5000)
-                    print(f"  ✅ Marcado (via click direto)")
-            else:
-                label = modal.locator(f"label[for='{cb_id}']")
-                if label.count() > 0:
-                    label.click(timeout=5000)
-                    print(f"  ✅ Desmarcado (via label)")
-                else:
-                    cb.click(force=True, timeout=5000)
-                    print(f"  ✅ Desmarcado (via click direto)")
-        except Exception as e:
-            print(f"  ⚠️  Erro ao processar checkbox {cb_id}: {str(e)[:50]}. Continuando...")
-
-def extrair_texto_pergunta(modal, elemento, elemento_id: str) -> str:
-    """
-    Tenta extrair o texto da pergunta de várias formas:
-    1. aria-label do elemento
-    2. Texto em fieldset/legend próximo
-    3. Label com 'for' attribute
-    4. placeholder
-    5. Title/tooltip
-    6. Texto do parent ou próximos elementos
-    7. Procura agressivamente por qualquer texto no contexto
-    """
-    
-    # Tenta aria-label PRIMEIRO (mais específico)
-    aria_label = elemento.get_attribute("aria-label")
-    if aria_label and aria_label.strip() and aria_label.lower() not in ["yes", "no"]:
-        return aria_label.strip()
-    
-    # Tenta encontrar fieldset/legend (agrupa opções relacionadas)
-    try:
-        parent_fieldset = elemento.locator("ancestor::fieldset")
-        if parent_fieldset.count() > 0:
-            legend = parent_fieldset.locator("legend")
-            if legend.count() > 0:
-                texto = legend.inner_text().strip()
-                if texto and texto.lower() not in ["yes", "no"]:
-                    return texto
-    except:
-        pass
-    
-    # Tenta label[for='id']
-    label = modal.locator(f"label[for='{elemento_id}']")
-    if label.count() > 0:
-        texto = label.inner_text().strip()
-        if texto and texto.lower() not in ["yes", "no"]:
-            return texto
-    
-    # Tenta placeholder
-    placeholder = elemento.get_attribute("placeholder")
-    if placeholder and placeholder.lower() not in ["yes", "no"]:
-        return placeholder.strip()
-    
-    # Tenta title/tooltip
-    title = elemento.get_attribute("title")
-    if title and title.lower() not in ["yes", "no"]:
-        return title.strip()
-    
-    # Tenta encontrar texto no container pai (div, form-group, etc)
-    try:
-        parent = elemento.locator("ancestor::div[1]")
-        if parent.count() > 0:
-            # Procura por elementos de texto próximos (label, span, p)
-            for seletor_texto in ["label", "span.artdeco-inline-feedback", "p", "div[class*='label']", "span"]:
-                elementos_texto = parent.locator(seletor_texto)
-                for i in range(min(5, elementos_texto.count())):  # Pega até 5 primeiros
-                    try:
-                        texto = elementos_texto.nth(i).inner_text().strip()
-                        if texto and len(texto) > 3 and texto.lower() not in ["yes", "no"]:
-                            return texto
-                    except:
-                        pass
-    except:
-        pass
-    
-    # Procura agressivamente em toda a hierarquia acima
-    try:
-        for nivel in range(1, 6):  # Procura até 5 níveis acima
-            ancestor = elemento.locator(f"ancestor::div[{nivel}]")
-            if ancestor.count() > 0:
-                # Procura por qualquer texto dentro
-                all_text = ancestor.inner_text().strip()
-                if all_text and len(all_text) > 10:
-                    # Limpa e pega apenas a primeira frase
-                    primeira_frase = all_text.split('\n')[0].strip()
-                    if primeira_frase and len(primeira_frase) > 5 and primeira_frase.lower() not in ["yes", "no"]:
-                        return primeira_frase[:200]
-    except:
-        pass
-    
-    # Fallback: procura em siblings
-    try:
-        siblings = elemento.locator("parent::*").locator("text=*")
-        for i in range(min(5, siblings.count())):
-            try:
-                texto = siblings.nth(i).inner_text().strip()
-                if texto and len(texto) > 3 and texto.lower() not in ["yes", "no"]:
-                    return texto
-            except:
-                pass
-    except:
-        pass
-    
-    # Se não encontrou nada, retorna um texto genérico baseado no tipo de elemento
-    tipo_elemento = elemento.get_attribute("type") or "campo"
-    return f"Pergunta sobre {tipo_elemento}"
-
-def detectar_e_preencher_tela_v2(modal, page) -> str:
-    """Versão melhorada que usa a nova função"""
-    page.wait_for_timeout(1000)
-
-    # ... código anterior para nome, email, telefone, CV ...
-
-    # ── Tela de perguntas adicionais (NOVO) ──
-    inputs_adicionais = modal.locator("input, textarea, select")
-    if inputs_adicionais.count() > 0:
-        descobrir_e_preencher_todos_campos(modal, page)  # 👈 NOVA FUNÇÃO
-        return "perguntas"
-    else:
-        descobrir_e_preencher_todos_campos(modal, page)  # Tenta preencher mesmo sem detectar campos específicos, para não deixar perguntas em branco
-        return "desconhecida"
-
-def resposta_pergunta_llm(label_text: str, respostas: dict) -> str:
-    """
-    Chama a LLM para obter uma resposta para uma pergunta adicional do Easy Apply, com base no texto do label.
-    """
-    chat = ChatOllama(base_url="http://localhost:11434", model="qwen2.5:7b", temperature=0.7)
-    
-    # Formata as respostas pré-existentes como string para o prompt
-    respostas_str = json.dumps(respostas, ensure_ascii=False, indent=2) if isinstance(respostas, dict) else str(respostas)
-    
-    # Escapa as chaves do JSON para que não sejam interpretadas como variáveis de template
-    respostas_str_escaped = respostas_str.replace("{", "{{").replace("}", "}}")
+PROCESSO DE RESPOSTA:
+1. Leia a pergunta cuidadosamente
+2. Identifique o tipo de resposta esperada (texto, número, sim/não, opção)
+3. Responda apropriadamente baseado no contexto do candidato
+4. Sempre responda positivamente a perguntas sobre: LLMs, IA, automação, Python, disponibilidade imediata, termos e condições, relocation
+5. Se não souber, use o melhor palpite baseado no perfil do candidato"""
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", f"Você é um assistente especializado em preencher formulários de candidatura do LinkedIn. Com base no texto da pergunta, forneça a resposta mais adequada e concisa possível. Use as seguintes dicas para interpretar as perguntas:\n\n- Se a pergunta mencionar habilidades técnicas (ex: Python, Machine Learning), responda com o nível de experiência (0-5) ou 'Yes' se for uma pergunta de checkbox.\n- Se a pergunta for sobre salário, forneça um valor realista baseado no mercado para um cargo de AI Engineer Jr no Brasil e SOMENTE números.\n- Se a pergunta for sobre disponibilidade ou localização, responda com informações reais (ex: 'Imediata', 'Campinas').\n- Se a pergunta for sobre aceitar termos ou residir em determinado local, responda com 'Yes' ou 'No' conforme apropriado.\nSe perguntar o genero, sempre responda masculino\n- Para perguntas que não se encaixem nas categorias acima, use seu conhecimento geral para inferir a resposta mais provável\nSe a mensagem for dropdown, responda apenas com a opção exata a ser selecionada, sem explicações ou texto adicional.\nREGRA DE OURO: Tudo que exige números, responda somente com números. Para perguntas de checkbox, responda apenas 'Yes' ou 'No'. Evite qualquer texto explicativo ou adicional. Responda apenas o valor a ser preenchido no formulário.\nPegue essa lista pré-existente de respostas:\n{respostas_str_escaped}\nUse essa lista para responder perguntas semelhantes, mas se a pergunta for diferente, use seu conhecimento para inferir a resposta correta. Seja conciso e direto ao ponto.\nSe não souber a resposta, use seu melhor palpite baseado no contexto do formulário de candidatura para um cargo de AI Engineer Jr.\nSempre responda de maneira positiva a perguntas relacionados a LLMs, Agentes IA, automação,inteligência artificial, experiência com Python, disponibilidade para início imediato, aceitação de termos e condições, e disposição para residir em locais específicos, a menos que a pergunta indique claramente o contrário."),
-        ("human", "{pergunta}")
-        ]
-    )
+        ("system", system_prompt),
+        ("human", question)
+    ])
 
     chain = prompt | chat
+    response = chain.invoke({"question": question})
 
-    resposta = chain.invoke({"pergunta": label_text})
+    content = response.content if hasattr(response, "content") else str(response)
+    return content.strip() if isinstance(content, str) else str(content).strip()
 
-    if hasattr(resposta, "content"):
-        conteudo = resposta.content
-    else:
-        conteudo = str(resposta)
-    
-    # Garante que retorna uma string
-    return conteudo if isinstance(conteudo, str) else str(conteudo)
 
-def detectar_e_preencher_tela(modal, page, nome_cv: str) -> str:
+def _extract_field_question(modal, element, element_id: str) -> str:
     """
-    Detecta o conteúdo da tela atual do Easy Apply e preenche os campos.
-    Retorna o tipo de tela detectada.
+    Extrai o texto da pergunta REAL associado ao campo buscando o <label>.
     """
-    page.wait_for_timeout(1000)
-
-    # ── Tela de informações de contato (nome, email, localização) ──
-    first_name = modal.get_by_label("First name")
-    if first_name.count() > 0 and first_name.is_visible():
-        first_name.fill("Lucas Abner")
-        
-        last_name = modal.get_by_label("Last name")
-        if last_name.count() > 0 and last_name.is_visible():
-            last_name.fill("Caixeta de Oliveira")
-
-    email = modal.get_by_label("Email address")
-    if email.count() > 0 and email.is_visible():
+    # Estratégia 1: Procurar por <label for="element_id">
+    if element_id:
         try:
-            email.select_option(value="lucascaixeta02@gmail.com")
-        except Exception:
-            pass  # Já preenchido ou campo de texto
+            label = modal.locator(f"label[for='{element_id}']")
+            if label.count() > 0:
+                text = label.inner_text().strip()
+                if text and len(text) > 2:
+                    return text
+        except:
+            pass
+    
+    # Estratégia 2: aria-label (geralmente tem a pergunta)
+    aria_label = element.get_attribute("aria-label")
+    if aria_label and aria_label.strip() and len(aria_label) > 2:
+        return aria_label.strip()
+    
+    # Estratégia 3: placeholder
+    placeholder = element.get_attribute("placeholder")
+    if placeholder and placeholder.strip() and len(placeholder) > 2:
+        return placeholder.strip()
+    
+    # Estratégia 4: Procurar no parent mais próximo por texto
+    try:
+        parent = element.locator("xpath=ancestor::div[1]")
+        if parent.count() > 0:
+            parent_text = parent.inner_text().strip()
+            if parent_text and len(parent_text) > 10:
+                first_line = parent_text.split('\n')[0].strip()
+                if len(first_line) > 3:
+                    return first_line
+    except:
+        pass
+    
+    # Fallback
+    field_type = element.get_attribute("type") or element.get_attribute("name") or "campo"
+    return f"Campo de {field_type}"
 
-    loc_input = modal.get_by_label("Location (city)")
-    if loc_input.count() > 0 and loc_input.is_visible():
-        loc_input.click()
-        loc_input.fill("Campinas")
-        page.wait_for_timeout(500)
-        loc_input.press("ArrowDown")
-        loc_input.press("Enter")
 
-
-    # ── Tela de telefone ──
-    telefone = modal.get_by_label("Phone number")
-    if telefone.count() > 0 and telefone.is_visible():
-        telefone.fill("11960136292")
-        print("✅ Telefone preenchido")
-        return "telefone"
+def _fill_form_fields(modal, page, cv_path: str) -> bool:
+    """
+    Descobre TODOS os campos do formulário ANTES de responder.
+    Extrai a pergunta REAL (label) para cada campo.
+    LLM responde com contexto claro.
+    """
+    page.wait_for_timeout(800)
+    
+    # ─────────────────────────────────────────────────────────────────
+    # FASE 1: DESCOBRIR TODOS OS CAMPOS
+    # ─────────────────────────────────────────────────────────────────
+    
+    fields_to_fill = []
+    
+    # 1️⃣ INPUTS DE TEXTO
+    print("\n� Descobrindo campos de texto...")
+    text_inputs = modal.locator("input[type='text'].artdeco-text-input--input")
+    for i in range(text_inputs.count()):
+        inp = text_inputs.nth(i)
+        if not inp.is_visible():
+            continue
+        field_id = inp.get_attribute("id") or f"text_input_{i}"
+        question = _extract_field_question(modal, inp, field_id)
+        fields_to_fill.append({
+            "type": "text",
+            "element": inp,
+            "id": field_id,
+            "question": question
+        })
+        print(f"  ✓ {question[:50]}")
+    
+    # 2️⃣ TEXTAREAS
+    print("\n� Descobrindo textareas...")
+    textareas = modal.locator("textarea")
+    for i in range(textareas.count()):
+        ta = textareas.nth(i)
+        if not ta.is_visible():
+            continue
+        field_id = ta.get_attribute("id") or f"textarea_{i}"
+        question = _extract_field_question(modal, ta, field_id)
+        fields_to_fill.append({
+            "type": "textarea",
+            "element": ta,
+            "id": field_id,
+            "question": question
+        })
+        print(f"  ✓ {question[:50]}")
+    
+    # 3️⃣ SELECTS/DROPDOWNS
+    print("\n� Descobrindo dropdowns...")
+    selects = modal.locator("select")
+    for i in range(selects.count()):
+        sel = selects.nth(i)
+        if not sel.is_visible():
+            continue
+        field_id = sel.get_attribute("id") or f"select_{i}"
+        question = _extract_field_question(modal, sel, field_id)
+        options = sel.locator("option").all_inner_texts()
+        options = [op.strip() for op in options if op.strip() and op.strip() != "Selecionar opção"]
         
+        fields_to_fill.append({
+            "type": "select",
+            "element": sel,
+            "id": field_id,
+            "question": question,
+            "options": options
+        })
+        print(f"  ✓ {question[:50]} ({len(options)} opções)")
+    
+    # 4️⃣ CHECKBOXES E RADIO BUTTONS
+    print("\n🔍 Descobrindo checkboxes/radios...")
+    checkboxes = modal.locator("input[type='checkbox'], input[type='radio']")
+    for i in range(checkboxes.count()):
+        cb = checkboxes.nth(i)
+        if not cb.is_visible():
+            continue
+        field_id = cb.get_attribute("id") or f"checkbox_{i}"
+        question = _extract_field_question(modal, cb, field_id)
+        
+        fields_to_fill.append({
+            "type": "checkbox" if cb.get_attribute("type") == "checkbox" else "radio",
+            "element": cb,
+            "id": field_id,
+            "question": question
+        })
+        print(f"  ✓ {question[:50]}")
+    
+    # ─────────────────────────────────────────────────────────────────
+    # FASE 2: PREENCHER TODOS OS CAMPOS AGORA
+    # ─────────────────────────────────────────────────────────────────
+    
+    print(f"\n📝 Preenchendo {len(fields_to_fill)} campos...\n")
+    
+    for field in fields_to_fill:
+        try:
+            question = field["question"]
+            elem = field["element"]
+            
+            print(f"❓ {question}")
+            
+            # Chama LLM com contexto claro
+            if field["type"] == "select":
+                # Para dropdowns, informar as opções
+                options_text = f"\nOpções: {field['options']}"
+                answer = _get_llm_response(question + options_text)
+                
+                # Encontra opção que corresponde
+                answer_lower = answer.strip().lower()
+                selected = None
+                for opt in field["options"]:
+                    if answer_lower in opt.lower() or opt.lower() in answer_lower:
+                        selected = opt
+                        break
+                selected = selected or field["options"][0]
+                
+                elem.select_option(label=selected)
+                print(f"✅ Selecionado: {selected}\n")
+            
+            elif field["type"] in ["checkbox", "radio"]:
+                # Para checkbox/radio
+                answer = _get_llm_response(question)
+                should_mark = answer.strip().lower() in ["yes", "sim", "true", "1", "aceito", "sim, aceito", "aplicar", "select this"]
+                
+                is_marked = False
+                try:
+                    is_marked = elem.is_checked()
+                except:
+                    pass
+                
+                if should_mark != is_marked:
+                    # Tenta clicar na label associada
+                    label = modal.locator(f"label[for='{field['id']}']")
+                    if label.count() > 0:
+                        label.click(timeout=3000)
+                    else:
+                        elem.click(force=True, timeout=3000)
+                
+                print(f"✅ {'Marcado' if should_mark else 'Desmarcado'}\n")
+            
+            else:
+                # Para texto/textarea
+                answer = _get_llm_response(question)
+                if answer and answer.strip():
+                    elem.fill(answer.strip())
+                    print(f"✅ Preenchido: {answer[:50]}\n")
+        
+        except Exception as e:
+            print(f"⚠️  Erro ao processar campo: {str(e)[:50]}\n")
+    
+    # ─────────────────────────────────────────────────────────────────
+    # FASE 3: UPLOAD DE CV
+    # ─────────────────────────────────────────────────────────────────
+    
+    print("\n📄 Processando upload de CV...")
+    file_inputs = modal.locator("input[type='file']")
+    
+    if file_inputs.count() > 0:
+        cv_full_path = str(Path(__file__).parent.parent.parent / cv_path)
+        try:
+            file_inputs.first.set_input_files(cv_full_path)
+            print(f"✅ CV anexado: {cv_path}")
+        except Exception as e:
+            print(f"⚠️  Erro ao anexar CV: {str(e)[:40]}")
+    
+    return True
 
-    # ── Tela de upload de CV ──
-    upload_inputs = modal.locator("input[type='file']")
-    if upload_inputs.count() > 0:
-        caminho_path = Path(__file__).parent.parent.parent / f"{nome_cv}"
-        for i in range(upload_inputs.count()):
-            inp = upload_inputs.nth(i)
-            inp.set_input_files(str(caminho_path))
-            print(f"✅ CV anexado via input {i}: {caminho_path}")
-            return "cv_upload"
 
-    # ── Tela de perguntas adicionais ──
-    inputs_adicionais = modal.locator("input.artdeco-text-input--input")
-    selects_adicionais = modal.locator("select[data-test-text-entity-list-form-select]")
-    if inputs_adicionais.count() > 0:
-        descobrir_e_preencher_todos_campos(modal, page)
-        return "perguntas"
-    elif selects_adicionais.count() > 0:
-        descobrir_e_preencher_todos_campos(modal, page)
-        return "perguntas"
-    else:
-        descobrir_e_preencher_todos_campos(modal, page)  # Tenta preencher mesmo sem detectar campos específicos, para não deixar perguntas em branco
-        return "desconhecida"
-
-def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
+def apply_to_job(job_url: str, cv_filename: str) -> str:
     """
-    Ferramenta para a IA realizar o envio de candidatura diretamente pelo LinkedIn,
-    utilizando a sessão autenticada previamente salva.
+    Aplica automaticamente para uma vaga no LinkedIn.
+    Preenche TODOS os campos usando LLM para responder as perguntas.
+    Apenas o CV é pré-definido (passado como parâmetro).
+    
+    Args:
+        job_url: URL da vaga no LinkedIn
+        cv_filename: Nome do arquivo CV na raiz do projeto (ex: "CV_Lucas.pdf")
+        
+    Returns:
+        Mensagem de sucesso ou erro
     """
-    if not sessao_esta_valida():
-        print("⚠️  Sessão inválida. Iniciando autenticação...")
-        gerar_sessao_linkedin()
+    if not _validate_session():
+        print("⚠️ Sessão inválida. Criando nova...")
+        _create_session()
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 
-        page.goto(url_vaga)
+        page.goto(job_url)
         
-        # Tenta aguardar carregamento, mas não falha se timeout
         try:
             page.wait_for_load_state("domcontentloaded", timeout=8000)
-        except Exception as e:
-            print(f"⚠️ Página não carregou completamente ({str(e)[:40]}), continuando mesmo assim...")
+        except:
+            pass
         
-        page.wait_for_timeout(2000)  # Aguarda renderização completa
-        
-        # Tenta múltiplos seletores para o botão de candidatura
-        seletores_botao = [
+        page.wait_for_timeout(1500)
+
+        # ─────────────────────────────────────────────────────────────────
+        # Encontra botão de candidatura
+        # ─────────────────────────────────────────────────────────────────
+        apply_buttons = [
             ".jobs-apply-button--top-card",
             "button[aria-label*='Apply']",
             "button[aria-label*='apply']",
-            "button:has-text('Apply')",
             "button:has-text('Easy Apply')",
             ".jobs-apply-button",
         ]
         
-        botao_encontrado = False
-        for seletor in seletores_botao:
+        button_clicked = False
+        for selector in apply_buttons:
             try:
-                page.wait_for_selector(seletor, timeout=5000)
-                botao_encontrado = True
-                print(f"✅ Botão de candidatura encontrado: {seletor}")
+                page.wait_for_selector(selector, timeout=3000)
+                page.click(selector)
+                button_clicked = True
+                print("✅ Botão de candidatura clicado")
                 break
-            except Exception:
+            except:
                 continue
-        
-        if not botao_encontrado:
-            print("⚠️ Botão de candidatura não encontrado. Tentando scroll e reload...")
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            page.wait_for_timeout(2000)
-            try:
-                page.wait_for_selector(seletores_botao[0], timeout=5000)
-                print("✅ Botão encontrado após scroll")
-            except Exception:
-                page.screenshot(path="debug_botao_nao_encontrado.png")
-                browser.close()
-                return "❌ Botão de candidatura não encontrado. Verifique 'debug_botao_nao_encontrado.png'"
 
-        
-        # Clica no botão de candidatura
+        if not button_clicked:
+            page.screenshot(path="debug_apply_button.png")
+            browser.close()
+            return "❌ Botão de candidatura não encontrado"
+
+        # ─────────────────────────────────────────────────────────────────
+        # Aguarda e processa o modal
+        # ─────────────────────────────────────────────────────────────────
         try:
-            page.click(seletores_botao[0])
-        except Exception:
-            # Se o primeiro seletor falhar, tenta encontrar e clicar
-            for seletor in seletores_botao:
-                try:
-                    if page.locator(seletor).count() > 0:
-                        page.click(seletor)
-                        break
-                except Exception:
-                    continue
-        
-        page.wait_for_selector(".jobs-easy-apply-modal", timeout=10000)
-        print("Modal Easy Apply aberto!")
+            page.wait_for_selector(".jobs-easy-apply-modal", timeout=8000)
+        except:
+            browser.close()
+            return "❌ Modal Easy Apply não aberto"
 
-        MAX_TELAS = 10  # Limite de segurança para não entrar em loop infinito
+        print("🎯 Modal aberto! Preenchendo formulário...")
+
+        MAX_SCREENS = 15
+        current_screen = 0
 
         try:
-            for tela_num in range(1, MAX_TELAS + 1):
-                # Verifica se a página/modal ainda está válida
-                try:
-                    modal = page.locator(".jobs-easy-apply-modal")
-                    if modal.count() == 0:
-                        print("⚠️ Modal foi fechado. Encerrando candidatura...")
-                        break
-                except Exception as e:
-                    print(f"⚠️ Erro ao acessar modal: {e}")
+            while current_screen < MAX_SCREENS:
+                current_screen += 1
+                page.wait_for_timeout(800)
+
+                modal = page.locator(".jobs-easy-apply-modal")
+                if modal.count() == 0:
                     break
-                
-                page.wait_for_timeout(1000)
 
-                # ── Verifica se é a tela final (botão Enviar/Submit) ──
-                botao_enviar = modal.locator("button[aria-label='Enviar candidatura']")
-                botao_enviar_alt = modal.locator("button[aria-label='Submit application']")
-                botao_enviar_data = modal.locator("button[data-easy-apply-submit-button]")
+                # Verifica se é última tela (botão enviar)
+                submit_buttons = [
+                    modal.locator("button[aria-label*='Submit']"),
+                    modal.locator("button[aria-label*='Enviar']"),
+                    modal.locator("button[data-easy-apply-submit-button]"),
+                ]
 
-                for btn in [botao_enviar, botao_enviar_alt, botao_enviar_data]:
-                    if btn.count() > 0 and btn.is_visible():
-                        btn.click()
-                        print(f"✅ Candidatura enviada com sucesso na tela {tela_num}!")
+                for submit_btn in submit_buttons:
+                    if submit_btn.count() > 0 and submit_btn.is_visible():
+                        submit_btn.click()
+                        print(f"✅ Candidatura enviada na tela {current_screen}!")
                         page.wait_for_timeout(2000)
                         browser.close()
-                        return f"Candidatura enviada para: {nome_cv.replace('.pdf', '').replace('_', ' ')}"
+                        return f"✅ Candidatura enviada com sucesso! (CV: {cv_filename})"
 
-                # ── Detecta e preenche a tela atual ──
-                tipo_tela = detectar_e_preencher_tela(modal, page, nome_cv)
-                print(f"📄 Tela {tela_num}: {tipo_tela}")
+                # ─────────────────────────────────────────────────────────────────
+                # Preenche os campos da tela atual
+                # ─────────────────────────────────────────────────────────────────
+                print(f"\n📋 Tela {current_screen}")
+                _fill_form_fields(modal, page, cv_filename)
 
                 page.wait_for_timeout(500)
 
-                # ── Tenta avançar: Revisar > Avançar > Enviar ──
-                botao_revisar = modal.locator("button:has-text('Revisar'), button:has-text('Review')")
-                botao_avancar = modal.locator("button[data-easy-apply-next-button]")
+                # ─────────────────────────────────────────────────────────────────
+                # Avança para próxima tela
+                # ─────────────────────────────────────────────────────────────────
+                next_buttons = [
+                    modal.locator("button:has-text('Review')"),
+                    modal.locator("button:has-text('Revisar')"),
+                    modal.locator("button[data-easy-apply-next-button]"),
+                    modal.locator("button.artdeco-button--primary"),
+                ]
 
-                if botao_revisar.count() > 0 and botao_revisar.is_visible():
-                    botao_revisar.click()
-                    print(f"  ➡️ Clicou em Revisar")
-                elif botao_avancar.count() > 0 and botao_avancar.is_visible():
-                    botao_avancar.click()
-                    print(f"  ➡️ Avançou para próxima tela")
-                else:
-                    print(f"  ⚠️ Nenhum botão de avanço encontrado na tela {tela_num}")
-                    page.screenshot(path=f"debug_tela_{tela_num}.png")
-                    # Tenta clicar em qualquer botão primário visível como fallback
-                    botao_generico = modal.locator("button.artdeco-button--primary")
-                    if botao_generico.count() > 0 and botao_generico.first.is_visible():
-                        botao_generico.first.click()
-                        print(f"  ➡️ Clicou no botão primário genérico")
-                    else:
-                        break
+                advanced = False
+                for next_btn in next_buttons:
+                    if next_btn.count() > 0 and next_btn.is_visible():
+                        try:
+                            next_btn.click()
+                            print(f"  ➡️ Avançando...")
+                            advanced = True
+                            break
+                        except:
+                            continue
 
-                page.wait_for_timeout(1500)
+                if not advanced:
+                    print(f"  ⚠️ Nenhum botão de avanço encontrado")
+                    page.screenshot(path=f"debug_screen_{current_screen}.png")
+                    break
+
+                page.wait_for_timeout(1200)
+            return "Candidatura realizada com sucesso."
+            
 
         except Exception as e:
-            print(f"⚠️ Erro durante processamento das telas: {e}")
-        finally:
-            # Se saiu do loop sem enviar
-            print("⚠️ Limite de telas atingido ou erro ocorreu. Pausando para verificação manual.")
-            try:
-                page.pause()
-            except:
-                pass
-        
+            print(f"❌ Erro: {str(e)[:60]}")
+
+        browser.close()
         return "⚠️ Candidatura não foi enviada automaticamente. Verifique manualmente."
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPATIBILIDADE COM NOMES ANTIGOS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def sessao_esta_valida():
+    """Alias para compatibilidade"""
+    return _validate_session()
+
+def gerar_sessao_linkedin():
+    """Alias para compatibilidade"""
+    return _create_session()
+
+def buscar_multiplas_vagas(termo_pesquisa: str, quantidade_vagas=1):
+    """Alias para compatibilidade"""
+    return search_jobs(termo_pesquisa, quantidade_vagas)
+
+def tool_envio_candidatura(url_vaga: str, nome_cv: str) -> str:
+    """Alias para compatibilidade"""
+    return apply_to_job(url_vaga, nome_cv)
+
+
 if __name__ == "__main__":
-#     # caixa = buscar_multiplas_vagas("Desenvolvedor Python", 1)
-#     # print(caixa[0]["titulo"][:500].replace(" ", "_").lower())
-
-#     # r = tool_envio_candidatura("https://www.linkedin.com/jobs/search/?currentJobId=4381833617&keywords=Desenvolvedor%20Python", "/home/lucas.abner/Documentos/code/linkevagas/Lucas_Abner_Caixeta_CV_AI_Engineer_Jr.pdf")
-
-#     # print(r)
-
-    gerar_sessao_linkedin()
+    # Exemplos de uso:
+    # _create_session()
+    # jobs = search_jobs("AI Engineer", 5)
+    result = apply_to_job("https://www.linkedin.com/jobs/search/?currentJobId=4385479016&keywords=(IA)&origin=SUGGESTION", "C:\\Users\\lucas\\OneDrive\\Documentos\\coders\\linkevagas\\cv_desenvolvedor_de_agente_ia__remoto.pdf")
