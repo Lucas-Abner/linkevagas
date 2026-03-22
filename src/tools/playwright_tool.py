@@ -44,7 +44,7 @@ def _validate_session() -> bool:
 def _create_session():
     """Cria uma nova sessão do LinkedIn automaticamente ou manualmente."""
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
+        browser = playwright.chromium.launch(headless=TrueTrue
         context = browser.new_context()
         page = context.new_page()
 
@@ -79,14 +79,14 @@ def _create_session():
 # FUNÇÃO 2: Buscar Múltiplas Vagas
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def search_jobs(search_term: str, quantity: int = 5) -> list:
+def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list:
     """
     Busca múltiplas vagas no LinkedIn baseado em um termo de pesquisa.
     
     Args:
         search_term: Termo de busca (ex: "AI Engineer")
         quantity: Quantidade de vagas a extrair
-        
+        regiao: Região para filtrar as vagas
     Returns:
         Lista de vagas com título, descrição e URL
     """
@@ -98,12 +98,12 @@ def search_jobs(search_term: str, quantity: int = 5) -> list:
     quantity = int(quantity) if isinstance(quantity, str) and quantity.isdigit() else 5
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 
         search_term_encoded = search_term.replace(" ", "%20")
-        search_url = f"https://www.linkedin.com/jobs/search/?keywords={search_term_encoded}&f_AL=true"
+        search_url = f"https://www.linkedin.com/jobs/search/?currentJobId=4374809446&keywords={search_term_encoded}&f_AL=true&geoId=103451405"
 
         print(f"🔍 Buscando vagas: {search_term}")
         page.goto(search_url)
@@ -183,7 +183,6 @@ def search_jobs(search_term: str, quantity: int = 5) -> list:
 
                 print(f"✅ Vaga {idx + 1}: {title}")
                 print(f"   URL: {job_url}")
-                print(f"   Descrição: {description[:400]}...")
                 print("="*60)
             except Exception as e:
                 print(f"⚠️ Erro ao extrair vaga {idx + 1}: {str(e)[:50]}")
@@ -475,7 +474,7 @@ def apply_to_job(job_url: str, cv_filename: str) -> str:
         _create_session()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 

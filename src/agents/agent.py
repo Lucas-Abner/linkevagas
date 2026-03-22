@@ -1,4 +1,4 @@
-from agno.agent import Agent
+from agno.agent import Agent, RunOutput
 from pydantic import BaseModel, Field
 from typing import List
 from agno.models.openai import OpenAIResponses
@@ -14,92 +14,112 @@ load_dotenv()
 from src.tools.playwright_tool import buscar_multiplas_vagas, tool_envio_candidatura
 # Importando o novo arsenal de ferramentas
 from src.tools.cv_tool import ler_cv_base_md, salvar_cv_otimizado_md, converter_md_para_pdf
-from src.tools.ats_tool import tool_avaliar_score_ats
+from src.tools.ats_tool import tool_avaliar_score_ats, extract_entities, extrator_keywords_keybert, pre_process_pipeline
 
 
 MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
-MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
-MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:4b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
+MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 25})
+MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:4b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 25})
 MODEL_GPT_OPEN = OpenAIResponses(id=os.getenv("MODELO_GPT_OPEN", "openai/gpt-oss-20b"), api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")  # Configuração para GPT-4.1 mini
 
 
 buscar_vagas = os.environ.get("BUSCAR_VAGA", "Agente de IA")
 quantidade_vagas = os.environ.get("QUANTIDADE_VAGAS", 1)  # Recomendado processar 1 por vez para não confundir o modelo local
 
-class ATSExtract(BaseModel):
-    technical_terms: List[str] = Field(description="Tecnologias e ferramentas atômicas (ex: Python, AWS)")
-    soft_skills: List[str] = Field(description="Habilidades comportamentais")
-    desejaveis: List[str] = Field(description="Habilidades desejáveis ou marcadas com 'ou'")
-
 vagas_escolhidas = buscar_multiplas_vagas(buscar_vagas, quantidade_vagas)
 
-analista_ats = Agent(
-    name="Analista de ATS",
-    model=MODEL_OLLAMA_QWEN2,
-    description="Extrai palavras-chave de vagas em formato JSON estruturado.",
-    instructions=f"""
-<task>
-Leia o texto da vaga abaixo e extraia palavras-chave para cada categoria do schema JSON.
-A vaga pode estar em português ou inglês. Copie os termos NO IDIOMA ORIGINAL da vaga.
-</task>
+class TermosOutput(BaseModel):
+    termos_corrigidos: List[str] = Field(
+        description="Separação semantica de cada termo técnico, ferramenta ou tecnologia extraída da vaga, corrigida e formatada para otimização ATS."
+    )
+    
+class ATSClassifiedOutput(BaseModel):
+    technical_terms: List[str] = Field(
+        description="Technologies, tools, programming languages, frameworks."
+    )
+    soft_skills: List[str] = Field(
+        description="Interpersonal and behavioral traits."
+    )
+    desejaveis: List[str] = Field(
+        description="Nice-to-have or preferred skills explicitly or implicitly indicated."
+    )
 
-<vaga>
-{buscar_vagas}
-</vaga>
 
-<rules>
-REGRA 1 — Pense passo a passo antes de preencher cada campo:
-  (a) Leia toda a vaga uma vez.
-  (b) Para cada termo encontrado, decida em qual categoria ele se encaixa.
-  (c) Preencha o schema apenas com termos que você encontrou no texto.
+analista_classificador = Agent(
+    name="ATS Hard Skills Extractor",
+    model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 25}),
+    role="Extract ALL technical skills, tools, and technologies from job descriptions.",
+        instructions="""
+You are given a list of extracted terms from a job description.
+Your task is to clean and normalize them.
 
-REGRA 2 — Cada categoria aceita APENAS estes tipos de termos:
+STRICT RULES:
+1. Extract only meaningful skills or technologies
+2. Split combined terms (e.g. "python java sql" → "Python", "Java", "SQL")
+3. Remove filler words (e.g. "experiência", "trabalhou", "com")
+4. Normalize terms (e.g. "deep learning trabalhou" → "Deep Learning")
+5. Remove duplicates
+6. DO NOT remove valid skills
+7. DO NOT invent new terms. If there are no valid skills, return an empty list [].
 
-  technical_terms → Ferramentas, linguagens, frameworks, plataformas, protocolos.
-    ACEITO: Python, Linux, Bash, REST API, LLMs, Docker, SQL, Git
-    RECUSADO: qualquer frase com verbo (ex: "desenvolver sistemas", "trabalhar com")
+!!! IMPORTANT: DO NOT COPY THE EXAMPLES BELOW. THEY ARE JUST EXAMPLES. !!!
 
-  soft_skills → Habilidades comportamentais, mentais ou de comunicação.
-    ACEITO: attention to detail, problem-solving, analytical skills, teamwork
-    RECUSADO: nomes de tecnologias, linguagens ou ferramentas
+Example Output:
+["Skill 1", "Skill 2", "Skill 3"]
 
-  desejaveis → Termos das seções "Nice to Have", "Preferred", "Diferencial" ou "Plus".
-    ACEITO: RLHF, SFT, CI/CD, browser automation
-    RECUSADO: requisitos marcados como obrigatórios
-
-REGRA 3 — Formato dos termos:
-  - Entre 1 e 3 palavras por termo.
-  - Sem pontuação extra, sem frases longas.
-  - Se uma categoria não tiver nenhum termo na vaga, retorne lista vazia [].
-</rules>
-
-<output_instructions>
-Retorne APENAS o JSON preenchido, sem texto antes ou depois.
-Não adicione explicações, comentários ou markdown.
-</output_instructions>
+ONLY keep terms that are explicitly present in the input.
+REMOVE generic terms like:
+"AI", "Coding", "Testing", "Project", "CV", "Proficiency", "Experience", "Knowledge", "Skills", "Work", etc.
 """,
-    expected_output="""JSON válido preenchendo todos os campos do schema ATSExtract.
-Exemplo de saída esperada:
-{
-  "technical_terms": ["Python", "Linux", "REST API"],
-  "soft_skills": ["problem-solving", "attention to detail"],
-  "desejaveis": ["RLHF", "CI/CD"]
-}""",
-    output_schema=ATSExtract
+    output_schema=TermosOutput,
 )
+
+analista_ats = Agent(
+    name="ATS Skills Classifier",
+    model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 25}),
+    role="Classify normalized ATS terms into technical skills, soft skills, and desirable skills.",
+        instructions="""
+You are given a CLEANED and NORMALIZED list of terms extracted from a job description.
+Your job is ONLY to classify them.
+
+STRICT RULES:
+1. DO NOT modify, rewrite, or normalize any term
+2. DO NOT remove any valid term
+3. DO NOT invent new terms. If the input is empty, return empty lists.
+4. Each term MUST go into ONLY ONE category
+5. DO NOT copy the examples below.
+
+CLASSIFICATION RULES:
+- technical_terms: Tools, technologies, programming languages, etc.
+- soft_skills: Behavioral or interpersonal traits.
+- desejaveis: Nice-to-have or preferred skills.
+
+Example Input:
+["Skill A", "Skill B", "Skill C"]
+
+Example Output:
+{
+  "technical_terms": ["Skill A"],
+  "soft_skills": ["Skill B"],
+  "desejaveis": ["Skill C"]
+}
+""",
+    output_schema=ATSClassifiedOutput,
+)
+
 
 agente_leitor = Agent(
     name="Leitor de CV",
     model=MODEL_OLLAMA_QWEN2,
     description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
-    instructions="""Você tem UMA única responsabilidade: recuperar o conteúdo do currículo base.
+    instructions="""You have a single responsibility: to retrieve the content of the base resume.
 
-    PASSOS OBRIGATÓRIOS:
-    1. Acione IMEDIATAMENTE a ferramenta `ler_cv_base_md`.
-    2. Retorne o conteúdo EXATAMENTE como foi lido, sem alterar uma única palavra.
-    3. NÃO faça análises, NÃO reescreva, NÃO adicione comentários.
+    REQUIRED STEPS:
+    1. IMMEDIATELY activate the `ler_cv_base_md` tool.
+    2. Return the content EXACTLY as it was read, without changing a single word.
+    3. DO NOT perform any analysis, DO NOT rewrite, DO NOT add comments.
 
-    REGRA DE OURO: Sua saída deve ser idêntica ao arquivo lido. Zero criatividade aqui.
+    GOLDEN RULE: Your output must be identical to the read file. Zero creativity here.
     """,
     tools=[ler_cv_base_md],
 )
@@ -204,10 +224,35 @@ def pipeline_cv(termos_ats: list) -> str:
     for _, termo in enumerate(termos_ats):
         print("="*60)
         print(f"\n[1/5] Analisando a Vaga: {termo['title']}\n URL: {termo['url']}")
-        print(f"Breve descrição: {termo['description'][:300]}...\n")
-        resultado_ats = analista_ats.run(termo["description"])
-        pprint_run_response(resultado_ats)
+        spacy_terms = extract_entities(termo["description"])
+        keybert_terms = extrator_keywords_keybert(termo["description"])
+        print("DEBUG: Termos Spacy:", spacy_terms)
+        print("DEBUG: Termos KeyBERT:", keybert_terms)
 
+        combined = list(set(spacy_terms + keybert_terms))
+        print("DEBUG: Termos combinados:", combined)
+
+        cleaned_terms = pre_process_pipeline(combined) # Limpeza prévia para remover ruídos óbvios antes de passar para o agente
+
+        if not cleaned_terms:
+            print("⚠️ ATENÇÃO: Nenhum termo técnico relevante foi extraído da vaga. O pipeline continuará, mas a otimização ATS pode ser prejudicada.")
+            cleaned_terms = combined # Se não sobrar nada, tenta mandar o combined para o LLM mesmo
+
+        print("Termos extraídos:", cleaned_terms)
+
+        resultado_classificador = analista_classificador.run(cleaned_terms)
+        pprint_run_response(resultado_classificador)
+
+        resultado_ats = analista_ats.run(resultado_classificador.content.termos_corrigidos)
+        ats_data = resultado_ats.content
+
+        todas_keywords = (
+            ats_data.technical_terms +
+            ats_data.soft_skills +
+            ats_data.desejaveis
+        )
+
+        pprint_run_response(resultado_ats)
         print("\n[2/5] Acionando o Agente Redator...")
         # O comando inicial que dá o gatilho para a IA trabalhar sozinha
         resultado_leitura = agente_leitor.run("Leia o currículo base agora.")
@@ -222,8 +267,7 @@ def pipeline_cv(termos_ats: list) -> str:
         feedback_do_juiz = "" 
         
         # Extrai as listas do objeto Pydantic
-        palavras_chave_vaga = resultado_ats.content.technical_terms + resultado_ats.content.desejaveis
-        termos_formatados = ", ".join(palavras_chave_vaga) # Transforma em texto para o Redator ler
+        termos_formatados = ", ".join(todas_keywords) # Transforma em texto para o Redator ler
 
         while not ats_satisfeito:
             prompt_redacao = f"""
@@ -245,7 +289,7 @@ def pipeline_cv(termos_ats: list) -> str:
             texto_cv_gerado = resposta_redacao.content
 
             # 2. Avaliação Matemática (passando a lista diretamente!)
-            resultado_matematico = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=palavras_chave_vaga)
+            resultado_matematico = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=todas_keywords)
             
             print("\n📊 --- RESULTADO DO ALGORITMO ATS ---")
             print(resultado_matematico)
@@ -285,3 +329,4 @@ if __name__ == "__main__":
     print("Iniciando o pipeline de otimização de currículo...\n")
     # print(f"Vaga escolhida para otimização: {vagas_escolhidas[-1]['titulo']}\n{vagas_escolhidas[-1]['descricao']}")
     pipeline_cv(termos_ats=vagas_escolhidas)
+    # print(vagas_escolhidas[-1]["description"])
