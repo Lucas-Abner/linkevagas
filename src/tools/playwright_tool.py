@@ -44,7 +44,7 @@ def _validate_session() -> bool:
 def _create_session():
     """Cria uma nova sessão do LinkedIn automaticamente ou manualmente."""
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=TrueTrue
+        browser = playwright.chromium.launch(headless=False)
         context = browser.new_context()
         page = context.new_page()
 
@@ -98,7 +98,7 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
     quantity = int(quantity) if isinstance(quantity, str) and quantity.isdigit() else 5
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 
@@ -474,7 +474,7 @@ def apply_to_job(job_url: str, cv_filename: str) -> str:
         _create_session()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 

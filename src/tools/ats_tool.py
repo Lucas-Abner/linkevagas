@@ -6,46 +6,55 @@ import json
 # O modelo PT é necessário pois possui o parser gramatical (noun_chunks) que extrai os jargões
 nlp = spacy.load("pt_core_news_sm")
 
-def tool_avaliar_score_ats(cv_text: str, keywords: list) -> str:
-    """
-    Avalia a aderência do CV procurando a correspondência exata das palavras-chave da vaga.
-    """
-    cv_lower = cv_text.lower()
-    
-    if not keywords:
-        return "AVALIAÇÃO APROVADA. Nenhuma palavra-chave técnica específica encontrada para cobrar."
+def tool_avaliar_score_ats(cv_text: str, keywords: list, count: int = 0) -> tuple[str, int]:
+     """
+     Avalia a aderência do CV procurando a correspondência exata das palavras-chave da vaga.
+     """
+     cv_lower = cv_text.lower()
+     
+     if not keywords:
+          return "AVALIAÇÃO APROVADA. Nenhuma palavra-chave técnica específica encontrada para cobrar.", count
 
-    # Verifica quais palavras estão no CV
-    encontradas = []
-    faltantes = []
+     # Verifica quais palavras estão no CV
+     encontradas = []
+     faltantes = []
 
-    for kw in keywords:
-        kw_lower = kw.strip().lower()
-        if not kw_lower: continue
-        
-        if kw_lower in cv_lower:
-            encontradas.append(kw)
-        else:
-            faltantes.append(kw)
+     for kw in keywords:
+          kw_lower = kw.strip().lower()
+          if not kw_lower: continue
+          
+          if kw_lower in cv_lower:
+               encontradas.append(kw)
+          else:
+               faltantes.append(kw)
 
-    # Calcula o Score
-    total_palavras = len(encontradas) + len(faltantes)
-    score_porcentagem = round((len(encontradas) / total_palavras) * 100, 2) if total_palavras > 0 else 0
+     # Calcula o Score
+     total_palavras = len(encontradas) + len(faltantes)
+     score_porcentagem = round((len(encontradas) / total_palavras) * 100, 2) if total_palavras > 0 else 0
 
-    # Gera o Feedback
-    feedback = f"O Score ATS atual é: {score_porcentagem}% ({len(encontradas)}/{total_palavras} termos encontrados).\n"
-    
-    if score_porcentagem < 60:
-         print(f"DEBUG: Score BAIXO - Faltam: {faltantes}")
-         feedback += f"AVALIAÇÃO REPROVADA. O currículo ignorou muitas ferramentas vitais. \nTermos OBRIGATÓRIOS que ESQUECEU de incluir: {', '.join(faltantes)}. \nRefaça o currículo inserindo estas palavras nas experiências."
-    elif score_porcentagem < 90:
-         print(f"DEBUG: Score MEDIANO - Faltam: {faltantes}")
-         feedback += f"AVALIAÇÃO MEDIANA. Quase lá. \nAinda faltam as seguintes palavras-chave: {', '.join(faltantes)}. \nIncorpore-as de forma natural no texto."
-    else:
-         print(f"DEBUG: Score ALTO ({score_porcentagem}%) - O CV está excelente!")
-         feedback += "AVALIAÇÃO APROVADA. Excelente aderência."
-         
-    return feedback
+     # Gera o Feedback
+     feedback = f"O Score ATS atual é: {score_porcentagem}% ({len(encontradas)}/{total_palavras} termos encontrados).\n"
+     
+     if score_porcentagem < 60:
+          print(f"DEBUG: Score BAIXO - Faltam: {faltantes}")
+          feedback += f"AVALIAÇÃO REPROVADA. O currículo ignorou muitas ferramentas vitais. \nTermos OBRIGATÓRIOS que ESQUECEU de incluir: {', '.join(faltantes)}. \nRefaça o currículo inserindo estas palavras nas experiências."
+          count += 1
+     elif score_porcentagem < 90:
+          print(f"DEBUG: Score MEDIANO - Faltam: {faltantes}")
+          feedback += f"AVALIAÇÃO MEDIANA. Quase lá. \nAinda faltam as seguintes palavras-chave: {', '.join(faltantes)}. \nIncorpore-as de forma natural no texto."
+          count += 1
+     else:
+          print(f"DEBUG: Score ALTO ({score_porcentagem}%) - O CV está excelente!")
+          feedback += "AVALIAÇÃO APROVADA. Excelente aderência."
+          count = 0  # Reseta o contador se estiver aprovado
+
+     print(f"DEBUG: Counter atual: {count}\nRestão: {count - 10} tentativas restantes antes de atingir o limite.")
+
+     if count == 10:
+          feedback += "\nAVISO: Você atingiu o limite de 10 avaliações. Por favor, Envie o curriculo da maneira que estiver."
+          return feedback, count
+          
+     return feedback, count
 
 def extract_entities(text):
     doc = nlp(text)

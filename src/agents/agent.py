@@ -4,6 +4,7 @@ from typing import List
 from agno.models.openai import OpenAIResponses
 from agno.models.ollama import Ollama
 from agno.models.message import Message
+from agno.eval.performance import PerformanceEval
 from agno.utils.pprint import pprint_run_response
 import os
 from dotenv import load_dotenv
@@ -18,8 +19,8 @@ from src.tools.ats_tool import tool_avaliar_score_ats, extract_entities, extrato
 
 
 MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
-MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 25})
-MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:4b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 25})
+MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
+MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:4b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
 MODEL_GPT_OPEN = OpenAIResponses(id=os.getenv("MODELO_GPT_OPEN", "openai/gpt-oss-20b"), api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")  # Configuração para GPT-4.1 mini
 
 
@@ -47,7 +48,8 @@ class ATSClassifiedOutput(BaseModel):
 
 analista_classificador = Agent(
     name="ATS Hard Skills Extractor",
-    model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 25}),
+    # model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 99}),
+    model=MODEL_GPT,
     role="Extract ALL technical skills, tools, and technologies from job descriptions.",
         instructions="""
 You are given a list of extracted terms from a job description.
@@ -76,7 +78,8 @@ REMOVE generic terms like:
 
 analista_ats = Agent(
     name="ATS Skills Classifier",
-    model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 25}),
+    # model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 99}),
+    model=MODEL_GPT,
     role="Classify normalized ATS terms into technical skills, soft skills, and desirable skills.",
         instructions="""
 You are given a CLEANED and NORMALIZED list of terms extracted from a job description.
@@ -288,9 +291,11 @@ def pipeline_cv(termos_ats: list) -> str:
             resposta_redacao = agente_redator.run(prompt_redacao)
             texto_cv_gerado = resposta_redacao.content
 
+            counter = 0
+
             # 2. Avaliação Matemática (passando a lista diretamente!)
-            resultado_matematico = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=todas_keywords)
-            
+            resultado_matematico = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=todas_keywords, count=counter)
+
             print("\n📊 --- RESULTADO DO ALGORITMO ATS ---")
             print(resultado_matematico)
             print("------------------------------------\n")
