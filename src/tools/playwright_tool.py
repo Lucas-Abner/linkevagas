@@ -226,6 +226,7 @@ CONTEXTO DO CANDIDATO:
 - Disponibilidade: Imediata
 - Gênero: Masculino
 - Salário pretendido: 5000
+- CPF: 45829395894
 
 PROCESSO DE RESPOSTA:
 1. Leia a pergunta cuidadosamente
