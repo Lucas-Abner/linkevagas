@@ -113,7 +113,7 @@ Example Output:
 
 agente_leitor = Agent(
     name="Leitor de CV",
-    model=MODEL_OLLAMA_QWEN2,
+    model=MODEL_GPT,
     description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
     instructions="""You have a single responsibility: to retrieve the content of the base resume.
 
@@ -284,7 +284,7 @@ def pipeline_cv(termos_ats: list) -> str:
                 {termos_formatados}
                 """
             
-            if feedback_do_juiz:
+            if feedback_do_juiz and ("REPROVADA" in feedback_do_juiz or "MEDIANO" in feedback_do_juiz):
                 prompt_redacao += f"\n\nATENÇÃO! A sua versão anterior foi reprovada pelo algoritmo de ATS. Corrija o currículo baseado neste feedback crítico:\n{feedback_do_juiz}"
 
             # 1. Redator tenta escrever
@@ -294,16 +294,16 @@ def pipeline_cv(termos_ats: list) -> str:
             counter = 0
 
             # 2. Avaliação Matemática (passando a lista diretamente!)
-            resultado_matematico = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=todas_keywords, count=counter)
+            feedback_ats, counter = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=todas_keywords, count=counter)
 
             print("\n📊 --- RESULTADO DO ALGORITMO ATS ---")
-            print(resultado_matematico)
+            print(feedback_ats)
             print("------------------------------------\n")
 
             # 3. Verifica o veredito
-            if "REPROVADA" in resultado_matematico or "MEDIANO" in resultado_matematico:
+            if "REPROVADA" in feedback_ats or "MEDIANO" in feedback_ats:
                 print(f"⚠️ O Redator não atingiu o Score necessário. A reiniciar tentativa...")
-                feedback_do_juiz = resultado_matematico 
+                feedback_do_juiz = feedback_ats
             else:
                 print("✅ O currículo atingiu o Score exigido! A prosseguir...")
                 resultado_redacao = texto_cv_gerado 
