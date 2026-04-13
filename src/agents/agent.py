@@ -291,10 +291,8 @@ def pipeline_cv(termos_ats: list) -> str:
             resposta_redacao = agente_redator.run(prompt_redacao)
             texto_cv_gerado = resposta_redacao.content
 
-            counter = 0
-
             # 2. Avaliação Matemática (passando a lista diretamente!)
-            feedback_ats, counter = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=todas_keywords, count=counter)
+            feedback_ats, _ = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=todas_keywords)
 
             print("\n📊 --- RESULTADO DO ALGORITMO ATS ---")
             print(feedback_ats)

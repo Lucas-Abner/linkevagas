@@ -103,7 +103,7 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
         page = context.new_page()
 
         search_term_encoded = search_term.replace(" ", "%20")
-        search_url = f"https://www.linkedin.com/jobs/search/?currentJobId=4374809446&keywords={search_term_encoded}&f_AL=true&geoId=103451405"
+        search_url = f"{os.getenv('LINKEDIN_PREFIX')}{search_term_encoded}"
 
         print(f"🔍 Buscando vagas: {search_term}")
         page.goto(search_url)
