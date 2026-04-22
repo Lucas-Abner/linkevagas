@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""
+LinkeVagas GUI — Entry Point.
+
+Launch with::
+
+    python gui/main.py
+
+This script ensures the project root is on ``sys.path`` and the working
+directory is set correctly so that ``.env`` and ``linkedin_session.json``
+paths resolve as the existing code expects.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+# ── resolve project root ────────────────────────────────────────────────────
+# The GUI lives at <project_root>/gui/main.py, so the project root is one
+# level up.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Ensure project root is on sys.path so ``from gui…`` and ``from src…`` work.
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+# Set CWD to project root (the agent code uses relative paths for .env, etc.)
+os.chdir(_PROJECT_ROOT)
+
+
+def main() -> None:
+    from gui.app import App
+    app = App()
+    app.run()
+
+
+if __name__ == "__main__":
+    main()

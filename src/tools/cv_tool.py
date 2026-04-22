@@ -72,33 +72,41 @@ def converter_md_para_pdf(caminho_md: str) -> str:
                     body{{
                     font-family: Arial, sans-serif;
                     font-size: 10pt;
-                    line-height: 1.3;
+                    line-height: 1.6;
+                    word-spacing: 0.05em;
+                    letter-spacing: 0.01em;
                     color: #000;
                     }}
                     h1 {{
                     font-size: 14pt;
                     text-align: center;
-                    margin-bottom: 5px;
+                    margin-bottom: 8px;
                     text-transform: uppercase;
+                    letter-spacing: 0.03em;
                     }}
                     h2 {{
                         font-size: 12pt;
                         border-bottom: 1px solid #000;
-                        margin-top: 10px;
-                        margin-bottom: 5px;
-                        padding-bottom: 2px;
+                        margin-top: 14px;
+                        margin-bottom: 8px;
+                        padding-bottom: 3px;
                     }}
                     h3 {{
                         font-size: 10.5pt;
-                        margin-top: 8px;
-                        margin-bottom: 3px;
+                        margin-top: 10px;
+                        margin-bottom: 5px;
                     }}
-                    p, ul {{
-                        margin-top: 3px;
-                        margin-bottom: 3px;
+                    p {{
+                        margin-top: 5px;
+                        margin-bottom: 5px;
+                    }}
+                    ul {{
+                        margin-top: 5px;
+                        margin-bottom: 8px;
+                        padding-left: 20px;
                     }}
                     li {{
-                        margin-bottom: 2px;
+                        margin-bottom: 4px;
                     }}
                     /* Para centralizar os contactos logo abaixo do nome, caso o IA gere uma div ou parágrafo específico */
                     .contatos {{
