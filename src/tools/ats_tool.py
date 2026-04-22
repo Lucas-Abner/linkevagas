@@ -40,6 +40,7 @@ def tool_avaliar_score_ats(cv_text: str, keywords: list) -> tuple[str, int]:
 
      if COUNT == 10:
           feedback += "\nAVISO: Você atingiu o limite de 10 avaliações. Por favor, Envie o curriculo da maneira que estiver."
+          COUNT = 0
           return feedback, COUNT
      
      if score_porcentagem < 60:
@@ -54,6 +55,7 @@ def tool_avaliar_score_ats(cv_text: str, keywords: list) -> tuple[str, int]:
           print(f"DEBUG: Score ALTO ({score_porcentagem}%) - O CV está excelente!")
           feedback += "AVALIAÇÃO APROVADA. Excelente aderência."
           COUNT = 0  # Reseta o contador se estiver aprovado
+          return feedback, COUNT
 
      print(f"DEBUG: Counter atual: {COUNT}\nRestão: {10 - COUNT} tentativas restantes antes de atingir o limite.")
 

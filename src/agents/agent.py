@@ -324,6 +324,7 @@ def pipeline_cv(termos_ats: list) -> str:
 
         print("\n[5/5] Acionando o Agente de Envio...")
         prompt_envio = f"Envie o arquivo '{resultado_conversao.content}' para a vaga {termo['url']}."
+        print(prompt_envio)
         agente_envio.run(prompt_envio)
 
     print("\n✅ Pipeline concluído.")
