@@ -31,10 +31,26 @@ os.chdir(_PROJECT_ROOT)
 
 
 def main() -> None:
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--run-agent":
+            # Run the agent in headless mode
+            import src.agents.agent
+            sys.exit(0)
+        elif sys.argv[1] == "--install-playwright":
+            # Run the playwright installation process programmatically
+            from playwright.__main__ import main as playwright_main
+            sys.argv = ["playwright", "install", "chromium"]
+            playwright_main()
+            sys.exit(0)
+
+    # Otherwise run the normal GUI
     from gui.app import App
     app = App()
     app.run()
 
 
 if __name__ == "__main__":
+    # Support for PyInstaller multiprocessing / subprocesses
+    import multiprocessing
+    multiprocessing.freeze_support()
     main()

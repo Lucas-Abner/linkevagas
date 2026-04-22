@@ -41,39 +41,42 @@ def _validate_session() -> bool:
         return False
 
 
-def _create_session():
+def _create_session(p=None):
     """Cria uma nova sessão do LinkedIn automaticamente ou manualmente."""
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
+    if p is None:
+        with sync_playwright() as playwright:
+            return _create_session(playwright)
+            
+    browser = p.chromium.launch(headless=False)
+    context = browser.new_context()
+    page = context.new_page()
 
-        page.goto("https://www.linkedin.com/login")
-        print("⏳ Fazendo login no LinkedIn...")
-        
-        email = os.getenv("LINKEDIN_EMAIL")
-        password = os.getenv("LINKEDIN_PASSWORD")
+    page.goto("https://www.linkedin.com/login")
+    print("⏳ Fazendo login no LinkedIn...")
+    
+    email = os.getenv("LINKEDIN_EMAIL")
+    password = os.getenv("LINKEDIN_PASSWORD")
 
-        if email and password:
-            try:
-                login = page.locator("input[name='session_key']")
-                login.fill(email)
-                senha = page.locator("input[name='session_password']")
-                senha.fill(password)
-                page.locator("button[type='submit']").click()
-                print("🔑 Login com credenciais do .env")
-                page.wait_for_timeout(5000)
-            except Exception as e:
-                print(f"⚠️ Erro ao fazer login automático: {e}")
-                print("ℹ️ Faça login manualmente...")
-                page.pause()
-        else:
-            print("ℹ️ Faça login manualmente no navegador que se abriu...")
+    if email and password:
+        try:
+            login = page.locator("input[name='session_key']")
+            login.fill(email)
+            senha = page.locator("input[name='session_password']")
+            senha.fill(password)
+            page.locator("button[type='submit']").click()
+            print("🔑 Login com credenciais do .env")
+            page.wait_for_timeout(5000)
+        except Exception as e:
+            print(f"⚠️ Erro ao fazer login automático: {e}")
+            print("ℹ️ Faça login manualmente...")
             page.pause()
+    else:
+        print("ℹ️ Faça login manualmente no navegador que se abriu...")
+        page.pause()
 
-        context.storage_state(path="linkedin_session.json")
-        print("✅ Sessão do LinkedIn salva com sucesso!")
-        browser.close()
+    context.storage_state(path="linkedin_session.json")
+    print("✅ Sessão do LinkedIn salva com sucesso!")
+    browser.close()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # FUNÇÃO 2: Buscar Múltiplas Vagas
@@ -108,9 +111,32 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
         print(f"🔍 Buscando vagas: {search_term}")
         page.goto(search_url)
 
-        if "linkedin.com/login" in page.url:
+        # ─────────────────────────────────────────────────────────────────
+        # Verifica se o LinkedIn invalidou a sessão no servidor
+        # ─────────────────────────────────────────────────────────────────
+        page.wait_for_timeout(2000)
+        is_logged_out = (
+            "linkedin.com/login" in page.url or 
+            page.locator("a:has-text('Entrar')").count() > 0 or
+            page.locator("button:has-text('Continuar com o Google')").count() > 0 or
+            page.locator("a[href*='login']").count() > 0
+        )
+
+        if is_logged_out:
+            print("⚠️ O LinkedIn desconectou sua sessão! Recriando...")
             browser.close()
-            raise Exception("Sessão expirada. Crie uma nova com _create_session()")
+            if os.path.exists("linkedin_session.json"):
+                os.remove("linkedin_session.json")
+            
+            # Tenta logar de novo
+            _create_session(p)
+            
+            # Reabre a página de busca com a nova sessão
+            browser = p.chromium.launch(headless=False)
+            context = browser.new_context(storage_state="linkedin_session.json")
+            page = context.new_page()
+            page.goto(search_url)
+            page.wait_for_timeout(2000)
 
         # Detecta seletor de vagas
         selectors = [
@@ -485,6 +511,27 @@ def apply_to_job(job_url: str, cv_filename: str) -> str:
             page.wait_for_load_state("domcontentloaded", timeout=8000)
         except:
             pass
+            
+        page.wait_for_timeout(2000)
+        is_logged_out = (
+            "linkedin.com/login" in page.url or 
+            page.locator("a:has-text('Entrar')").count() > 0 or
+            page.locator("button:has-text('Continuar com o Google')").count() > 0 or
+            page.locator("a[href*='login']").count() > 0
+        )
+
+        if is_logged_out:
+            print("⚠️ O LinkedIn desconectou sua sessão! Recriando...")
+            browser.close()
+            if os.path.exists("linkedin_session.json"):
+                os.remove("linkedin_session.json")
+            
+            _create_session(p)
+            browser = p.chromium.launch(headless=False)
+            context = browser.new_context(storage_state="linkedin_session.json")
+            page = context.new_page()
+            page.goto(job_url)
+            page.wait_for_timeout(2000)
         
         page.wait_for_timeout(1500)
 

@@ -103,17 +103,34 @@ class AgentProcess:
         # Prefer the project's virtual-env Python so that all dependencies
         # (playwright, agno, etc.) are available, even if the GUI itself was
         # launched with the system Python.
-        venv_python = self.project_root / ".venv" / "bin" / "python"
-        python = str(venv_python) if venv_python.is_file() else sys.executable
+        # Build the command arguments depending on whether we are frozen (PyInstaller)
+        is_frozen = getattr(sys, 'frozen', False)
+        if is_frozen:
+            cmd_args = [sys.executable, "--run-agent"]
+        else:
+            if sys.platform == "win32":
+                venv_python = self.project_root / ".venv" / "Scripts" / "python.exe"
+            else:
+                venv_python = self.project_root / ".venv" / "bin" / "python"
+                
+            python = str(venv_python) if venv_python.is_file() else sys.executable
+            cmd_args = [python, "-m", "src.agents.agent"]
+
+        # Define creationflags para esconder a janela no Windows
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
 
         self._proc = subprocess.Popen(
-            [python, "-m", "src.agents.agent"],
+            cmd_args,
             cwd=str(self.project_root),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",         # Force UTF-8 to handle emojis on Windows (cp1252 default breaks)
             bufsize=1,                # Line-buffered
-            env={**os.environ},       # Inherit env (dotenv is loaded at agent level)
+            env={**os.environ, "PYTHONUTF8": "1"},  # Also force UTF-8 inside the child process
+            creationflags=creationflags,
         )
 
         self._thread = threading.Thread(

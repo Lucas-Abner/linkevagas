@@ -4,6 +4,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import json
 
 # O modelo PT é necessário pois possui o parser gramatical (noun_chunks) que extrai os jargões
+# Instalado via pyproject.toml como dependência direta (pt-core-news-sm)
 nlp = spacy.load("pt_core_news_sm")
 COUNT = 0
 
