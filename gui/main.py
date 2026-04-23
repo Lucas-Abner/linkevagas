@@ -53,4 +53,21 @@ if __name__ == "__main__":
     # Support for PyInstaller multiprocessing / subprocesses
     import multiprocessing
     multiprocessing.freeze_support()
+    
+    import sys
+    import io
+    
+    # Forçar output em UTF-8 para não dar erro com os emojis no Windows (cp1252)
+    if sys.stdout is not None:
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        except AttributeError:
+            pass
+            
+    if sys.stderr is not None:
+        try:
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+        except AttributeError:
+            pass
+
     main()

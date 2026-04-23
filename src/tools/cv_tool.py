@@ -66,53 +66,52 @@ def converter_md_para_pdf(caminho_md: str) -> str:
                 <meta charset="utf-8">
                 <style>
                     @page{{
-                    size: A4 portrait;
-                    margin: 1.2cm;
+                        size: A4 portrait;
+                        margin: 1.0cm;
                     }}
                     body{{
-                    font-family: Arial, sans-serif;
-                    font-size: 10pt;
-                    line-height: 1.6;
-                    word-spacing: 0.05em;
-                    letter-spacing: 0.01em;
-                    color: #000;
+                        font-family: Arial, sans-serif;
+                        font-size: 9.5pt;
+                        line-height: 1.35;
+                        word-spacing: 0.05em;
+                        letter-spacing: 0.01em;
+                        color: #000;
                     }}
                     h1 {{
-                    font-size: 14pt;
-                    text-align: center;
-                    margin-bottom: 8px;
-                    text-transform: uppercase;
-                    letter-spacing: 0.03em;
+                        font-size: 13pt;
+                        text-align: center;
+                        margin-bottom: 6px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.03em;
                     }}
                     h2 {{
-                        font-size: 12pt;
+                        font-size: 11pt;
                         border-bottom: 1px solid #000;
-                        margin-top: 14px;
-                        margin-bottom: 8px;
-                        padding-bottom: 3px;
+                        margin-top: 10px;
+                        margin-bottom: 6px;
+                        padding-bottom: 2px;
                     }}
                     h3 {{
-                        font-size: 10.5pt;
-                        margin-top: 10px;
-                        margin-bottom: 5px;
+                        font-size: 10pt;
+                        margin-top: 6px;
+                        margin-bottom: 3px;
                     }}
                     p {{
-                        margin-top: 5px;
-                        margin-bottom: 5px;
+                        margin-top: 3px;
+                        margin-bottom: 3px;
                     }}
                     ul {{
-                        margin-top: 5px;
-                        margin-bottom: 8px;
+                        margin-top: 3px;
+                        margin-bottom: 6px;
                         padding-left: 20px;
                     }}
                     li {{
-                        margin-bottom: 4px;
+                        margin-bottom: 3px;
                     }}
-                    /* Para centralizar os contactos logo abaixo do nome, caso o IA gere uma div ou parágrafo específico */
                     .contatos {{
                         text-align: center;
-                        font-size: 9pt;
-                        margin-bottom: 15px;
+                        font-size: 8.5pt;
+                        margin-bottom: 10px;
                     }}
                 </style>
             </head>

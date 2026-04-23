@@ -70,6 +70,13 @@ _FIELDS = [
         "options": ["gpt-4o", "gpt-4o-mini", "qwen2.5:7b"],
     },
     {
+        "key": "MODO_PROCESSAMENTO",
+        "label": "☁️  Arquitetura de Processamento",
+        "type": "combo",
+        "hint": "Escolha se quer usar a nuvem ou processamento local",
+        "options": ["Híbrido (Recomendado)", "100% Nuvem (GPT)", "100% Local (Ollama)"],
+    },
+    {
         "key": "CV_PATH",
         "label": "📄  Currículo (PDF)",
         "type": "file",
@@ -102,8 +109,26 @@ class ConfigPanel(ttk.Frame):
         ).pack(side="left")
 
         # Scrollable area
-        container = tk.Frame(self, bg=BG_CARD)
-        container.pack(fill="both", expand=True, padx=16, pady=(4, 8))
+        scroll_frame = tk.Frame(self, bg=BG_CARD)
+        scroll_frame.pack(fill="both", expand=True, padx=(16, 0), pady=(4, 8))
+
+        self.canvas = tk.Canvas(scroll_frame, bg=BG_CARD, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(scroll_frame, orient="vertical", command=self.canvas.yview)
+        
+        container = tk.Frame(self.canvas, bg=BG_CARD)
+        self.canvas_window = self.canvas.create_window((0, 0), window=container, anchor="nw")
+        
+        container.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y", padx=(0, 4))
+        
+        # Habilitar scroll pelo mouse no Windows/Linux
+        def _on_mousewheel(event):
+            self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
         for field in _FIELDS:
             self._add_field(container, field)

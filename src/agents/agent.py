@@ -17,11 +17,20 @@ from src.tools.playwright_tool import buscar_multiplas_vagas, tool_envio_candida
 from src.tools.cv_tool import ler_cv_base_md, salvar_cv_otimizado_md, converter_md_para_pdf
 from src.tools.ats_tool import tool_avaliar_score_ats, extract_entities, extrator_keywords_keybert, pre_process_pipeline
 
-
-MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))  # Configuração para GPT-4.1 mini
+MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))
 MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
-MODEL_OLLAMA_QWEN3 = Ollama(id="qwen3.5:4b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
-MODEL_GPT_OPEN = OpenAIResponses(id=os.getenv("MODELO_GPT_OPEN", "openai/gpt-oss-20b"), api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")  # Configuração para GPT-4.1 mini
+
+MODO_PROCESSAMENTO = os.getenv("MODO_PROCESSAMENTO", "Híbrido (Recomendado)")
+
+if MODO_PROCESSAMENTO == "100% Local (Ollama)":
+    MODELO_INTELIGENTE = MODEL_OLLAMA_QWEN2
+    MODELO_BUROCRATICO = MODEL_OLLAMA_QWEN2
+elif "Nuvem" in MODO_PROCESSAMENTO:
+    MODELO_INTELIGENTE = MODEL_GPT
+    MODELO_BUROCRATICO = MODEL_GPT
+else: # Híbrido
+    MODELO_INTELIGENTE = MODEL_GPT
+    MODELO_BUROCRATICO = MODEL_OLLAMA_QWEN2
 
 
 buscar_vagas = os.environ.get("BUSCAR_VAGA", "Agente de IA")
@@ -49,7 +58,7 @@ class ATSClassifiedOutput(BaseModel):
 analista_classificador = Agent(
     name="ATS Hard Skills Extractor",
     # model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 99}),
-    model=MODEL_GPT,
+    model=MODELO_INTELIGENTE,
     role="Extract ALL technical skills, tools, and technologies from job descriptions.",
         instructions="""
 You are given a list of extracted terms from a job description.
@@ -79,7 +88,7 @@ REMOVE generic terms like:
 analista_ats = Agent(
     name="ATS Skills Classifier",
     # model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 99}),
-    model=MODEL_GPT,
+    model=MODELO_INTELIGENTE,
     role="Classify normalized ATS terms into technical skills, soft skills, and desirable skills.",
         instructions="""
 You are given a CLEANED and NORMALIZED list of terms extracted from a job description.
@@ -113,7 +122,7 @@ Example Output:
 
 agente_leitor = Agent(
     name="Leitor de CV",
-    model=MODEL_GPT,
+    model=MODELO_INTELIGENTE,
     description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
     instructions="""You have a single responsibility: to retrieve the content of the base resume.
 
@@ -129,7 +138,7 @@ agente_leitor = Agent(
 
 agente_redator = Agent(
     name="Redator de CV",
-    model=MODEL_GPT,
+    model=MODELO_INTELIGENTE,
     description="Reescreve o currículo base para otimização ATS, seguindo as regras de formatação e estratégia.",
     # additional_input=support_format_cv, # Restaurando o suporte de formato!
     instructions=f"""
@@ -158,7 +167,7 @@ agente_redator = Agent(
 
 agente_juiz_ats = Agent(
     name="Juiz de ATS",
-    model=MODEL_OLLAMA_QWEN2, # Modelos locais são ótimos para isso
+    model=MODELO_BUROCRATICO, # Modelos locais são ótimos para isso
     description="Avalia matematicamente a similaridade entre o CV gerado e a vaga.",
     instructions="""Você é o guardião da qualidade. 
     1. Receba o currículo redigido pelo Redator e a Descrição original da Vaga.
@@ -170,7 +179,7 @@ agente_juiz_ats = Agent(
 
 agente_copia_cola = Agent(
     name="Copia e Cola",
-    model=MODEL_OLLAMA_QWEN2,
+    model=MODELO_BUROCRATICO,
     description="Agente intermediário para passar o nome do arquivo Markdown do Redator para o Conversor.",
     instructions=f"""Você tem UMA única responsabilidade: receber o texto reescrito do Redator e salvar usando a ferramenta.
 
@@ -185,7 +194,7 @@ agente_copia_cola = Agent(
 
 agente_conversor = Agent(
     name="Conversor de CV",
-    model=MODEL_OLLAMA_QWEN2,
+    model=MODELO_BUROCRATICO,
     description="Converte o arquivo Markdown otimizado em PDF final.",
     instructions="""Você tem UMA única responsabilidade: converter o arquivo Markdown em PDF.
 
@@ -202,7 +211,7 @@ agente_conversor = Agent(
 
 agente_envio = Agent(
     name = "Agente de Envio de Candidatura",
-    model = MODEL_OLLAMA_QWEN2,
+    model = MODELO_BUROCRATICO,
     description = "Agente responsável por enviar o currículo otimizado para a vaga usando automação de navegador.",
     instructions = f"""Você tem UMA única responsabilidade: enviar o currículo otimizado para a vaga usando a ferramenta de automação de navegador.
     PASSOS OBRIGATÓRIOS:
