@@ -65,53 +65,116 @@ def converter_md_para_pdf(caminho_md: str) -> str:
             <head>
                 <meta charset="utf-8">
                 <style>
-                    @page{{
+                    @page {{
                         size: A4 portrait;
-                        margin: 1.0cm;
+                        margin: 1.5cm 1.8cm;
                     }}
-                    body{{
-                        font-family: Arial, sans-serif;
-                        font-size: 9.5pt;
-                        line-height: 1.35;
-                        word-spacing: 0.05em;
-                        letter-spacing: 0.01em;
-                        color: #000;
-                    }}
-                    h1 {{
-                        font-size: 13pt;
-                        text-align: center;
-                        margin-bottom: 6px;
-                        text-transform: uppercase;
-                        letter-spacing: 0.03em;
-                    }}
-                    h2 {{
-                        font-size: 11pt;
-                        border-bottom: 1px solid #000;
-                        margin-top: 10px;
-                        margin-bottom: 6px;
-                        padding-bottom: 2px;
-                    }}
-                    h3 {{
+
+                    body {{
+                        font-family: 'Calibri', 'Helvetica Neue', Arial, sans-serif;
                         font-size: 10pt;
-                        margin-top: 6px;
-                        margin-bottom: 3px;
+                        line-height: 1.5;
+                        word-spacing: 0.04em;
+                        color: #222;
+                        margin: 0;
+                        padding: 0;
                     }}
-                    p {{
-                        margin-top: 3px;
-                        margin-bottom: 3px;
-                    }}
-                    ul {{
-                        margin-top: 3px;
-                        margin-bottom: 6px;
-                        padding-left: 20px;
-                    }}
-                    li {{
-                        margin-bottom: 3px;
-                    }}
-                    .contatos {{
+
+                    /* ── Nome do candidato (h3 no topo) ── */
+                    h3:first-of-type {{
+                        font-size: 18pt;
+                        font-weight: 700;
                         text-align: center;
-                        font-size: 8.5pt;
+                        text-transform: uppercase;
+                        letter-spacing: 0.08em;
+                        color: #1a1a1a;
+                        margin: 0 0 2px 0;
+                        padding: 0;
+                    }}
+
+                    /* ── Títulos de seção (h3 restantes) ── */
+                    h3 {{
+                        font-size: 11pt;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 0.06em;
+                        color: #1a1a1a;
+                        margin: 14px 0 6px 0;
+                        padding-bottom: 3px;
+                        border-bottom: 1.5px solid #333;
+                    }}
+
+                    /* ── Separadores entre seções ── */
+                    hr {{
+                        border: none;
+                        height: 0;
+                        margin: 8px 0;
+                    }}
+
+                    /* ── Subtítulos em negrito (cargo, projeto) ── */
+                    strong {{
+                        font-weight: 700;
+                        font-size: 10pt;
+                        color: #111;
+                    }}
+
+                    /* ── Parágrafos (contato, datas, etc.) ── */
+                    p {{
+                        margin: 3px 0 5px 0;
+                        color: #333;
+                    }}
+
+                    /* Linha logo após o nome (contato) — centro */
+                    h3:first-of-type + p {{
+                        text-align: center;
+                        font-size: 9pt;
+                        color: #555;
+                        margin-bottom: 4px;
+                    }}
+
+                    /* Segunda linha de contato (links) */
+                    h3:first-of-type + p + p {{
+                        text-align: center;
+                        font-size: 9pt;
+                        color: #555;
                         margin-bottom: 10px;
+                    }}
+
+                    /* ── Listas (bullet points) ── */
+                    ul {{
+                        margin: 4px 0 8px 0;
+                        padding-left: 18px;
+                    }}
+
+                    li {{
+                        margin-bottom: 4px;
+                        line-height: 1.45;
+                        color: #333;
+                    }}
+
+                    /* ── Links ── */
+                    a {{
+                        color: #2563eb;
+                        text-decoration: none;
+                    }}
+
+                    /* ── Headings não usados mas para segurança ── */
+                    h1 {{
+                        font-size: 18pt;
+                        text-align: center;
+                        margin: 0 0 4px 0;
+                        text-transform: uppercase;
+                        letter-spacing: 0.08em;
+                    }}
+
+                    h2 {{
+                        font-size: 12pt;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 0.05em;
+                        border-bottom: 1.5px solid #333;
+                        margin: 14px 0 6px 0;
+                        padding-bottom: 3px;
                     }}
                 </style>
             </head>
