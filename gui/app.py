@@ -7,7 +7,17 @@ ProcessManager to drive the pipeline view and log viewer.
 
 from __future__ import annotations
 
-import tkinter as tk
+try:
+    import tkinter as tk
+except ImportError as e:
+    if 'tkinter' in str(e):
+        import sys
+        sys.stderr.write("Erro: Módulo 'tkinter' não encontrado.\n")
+        sys.stderr.write("Instale-o executando: sudo apt-get install python3-tk\n")
+        sys.exit(1)
+    else:
+        raise e
+
 from tkinter import ttk
 from pathlib import Path
 

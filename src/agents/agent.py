@@ -15,7 +15,8 @@ load_dotenv()
 from src.tools.playwright_tool import buscar_multiplas_vagas, tool_envio_candidatura
 # Importando o novo arsenal de ferramentas
 from src.tools.cv_tool import ler_cv_base_md, salvar_cv_otimizado_md, converter_md_para_pdf
-from src.tools.ats_tool import tool_avaliar_score_ats, extract_entities, extrator_keywords_keybert, pre_process_pipeline
+from src.tools.ats_tool import tool_avaliar_score_ats, extract_entities, extrator_keywords_keybert, pre_process_pipeline, avaliar_score_combinado
+from src.tools.tracking import registrar_candidatura, gerar_relatorio
 
 MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))
 MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
@@ -54,10 +55,41 @@ class ATSClassifiedOutput(BaseModel):
         description="Nice-to-have or preferred skills explicitly or implicitly indicated."
     )
 
+class JobAnalysisOutput(BaseModel):
+    """Análise estruturada e profunda da vaga para guiar a otimização do CV."""
+    titulo_normalizado: str = Field(description="Título da vaga normalizado")
+    senioridade: str = Field(description="junior|pleno|senior|lead|staff")
+    area_atuacao: str = Field(description="Área principal: backend, data, AI/ML, devops, fullstack, etc.")
+    
+    requisitos_essenciais: List[str] = Field(
+        description="Skills e experiências OBRIGATÓRIAS, citadas em seção de requisitos"
+    )
+    requisitos_desejaveis: List[str] = Field(
+        description="Skills desejáveis/diferenciais, citadas como nice-to-have"
+    )
+    habilidades_transferiveis: List[str] = Field(
+        description="Skills que o candidato pode demonstrar indiretamente via experiências correlatas"
+    )
+    
+    idioma_requerido: str = Field(description="Idioma e nível exigido (ex: Inglês C1, Português nativo)")
+    modelo_trabalho: str = Field(description="remoto|hibrido|presencial")
+    
+    tom_da_vaga: str = Field(
+        description="formal|startup|corporativo|técnico — usado para calibrar o tom do CV"
+    )
+    gaps_criticos: List[str] = Field(
+        description="Requisitos essenciais que o candidato NÃO possui e não pode contornar"
+    )
+    fit_score: int = Field(
+        description="0-100: estimativa de compatibilidade geral do perfil com a vaga"
+    )
+    estrategia_cv: str = Field(
+        description="Instruções específicas para o Redator sobre como adaptar o CV para esta vaga"
+    )
+
 
 analista_classificador = Agent(
     name="ATS Hard Skills Extractor",
-    # model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 99}),
     model=MODELO_INTELIGENTE,
     role="Extract ALL technical skills, tools, and technologies from job descriptions.",
         instructions="""
@@ -87,7 +119,6 @@ REMOVE generic terms like:
 
 analista_ats = Agent(
     name="ATS Skills Classifier",
-    # model=Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.0, "num_gpu": 99}),
     model=MODELO_INTELIGENTE,
     role="Classify normalized ATS terms into technical skills, soft skills, and desirable skills.",
         instructions="""
@@ -119,6 +150,51 @@ Example Output:
     output_schema=ATSClassifiedOutput,
 )
 
+analista_vaga = Agent(
+    name="Analista Estratégico de Vaga",
+    model=MODELO_INTELIGENTE,
+    role="Analista estratégico de vagas com expertise em recrutamento tech.",
+    instructions="""Você é um recrutador tech sênior com 15 anos de experiência.
+    
+    Sua missão é fazer uma análise ESTRATÉGICA da vaga, não apenas extrair palavras-chave.
+    
+    PASSOS OBRIGATÓRIOS:
+    
+    1. LEIA a descrição completa da vaga com atenção cirúrgica.
+    
+    2. IDENTIFIQUE a senioridade REAL (não o título — muitas vagas "Junior" pedem experiência de Pleno).
+    
+    3. SEPARE requisitos em ESSENCIAIS vs DESEJÁVEIS:
+       - Essenciais: aparecem em seções de "Requisitos", "Requirements", "Must-have"
+       - Desejáveis: aparecem em "Diferenciais", "Nice-to-have", "Preferred"
+       - Se não há seção clara, use o verbo: "deve ter" = essencial, "desejável" = desejável
+    
+    4. ANALISE O TOM da vaga:
+       - Corporativo formal: linguagem institucional, processos estruturados
+       - Startup: linguagem casual, "move fast", "ownership"
+       - Técnico: foco em stack específica, problemas complexos
+    
+    5. IDENTIFIQUE GAPS CRÍTICOS comparando com o CV do candidato:
+       Perfil do candidato: Junior AI Engineer, Python, LLMs, FastAPI, ML, CrewAI, 
+       HPC, Docker, SQL, Pandas. Inglês Intermediário. 1 estágio + projetos pessoais.
+    
+    6. CALCULE O FIT SCORE honestamente (0-100):
+       - <30: Não aplicar (perda de tempo e polui perfil)
+       - 30-50: Aplicar apenas se a empresa é muito desejada
+       - 50-70: Boa chance com CV bem otimizado
+       - >70: Match forte
+    
+    7. ESCREVA A ESTRATÉGIA para o Redator:
+       - Quais experiências destacar e como reframear
+       - Que linguagem usar (tom formal vs casual)
+       - Quais gaps cobrir com habilidades transferíveis
+       - O que NÃO tentar fingir (honestidade estratégica)
+    
+    REGRA DE OURO: Seja BRUTALMENTE honesto. É melhor não aplicar para uma vaga 
+    incompatível do que enviar um CV que será descartado em 5 segundos.""",
+    output_schema=JobAnalysisOutput,
+)
+
 
 agente_leitor = Agent(
     name="Leitor de CV",
@@ -139,29 +215,70 @@ agente_leitor = Agent(
 agente_redator = Agent(
     name="Redator de CV",
     model=MODELO_INTELIGENTE,
-    description="Reescreve o currículo base para otimização ATS, seguindo as regras de formatação e estratégia.",
-    # additional_input=support_format_cv, # Restaurando o suporte de formato!
-    instructions=f"""
-    Você recebe insumos via prompt: CONTEÚDO_BASE e TERMOS_ATS.
+    description="Reescreve o currículo para maximizar relevância para a vaga específica.",
+    instructions="""Você é um especialista em Career Coaching e otimização de CVs para o mercado tech.
     
-    PASSOS OBRIGATÓRIOS PARA OTIMIZAÇÃO ATS:
-    1. MATCH EXATO DE PALAVRAS-CHAVE: Ao adicionar ferramentas aos requisitos, use a grafia EXATA extraída pela análise da vaga.
-    2. RESUMO PROFISSIONAL: Incorpore os termos técnicos e soft skills mais importantes da vaga de forma natural nas três primeiras linhas.
-    3. FÓRMULA XYZ NA EXPERIÊNCIA: Reescreva as descrições de experiência e projetos utilizando a estrutura: "Realizei [Ação/Projeto] medido por [Métrica/Impacto] utilizando [Tecnologias ATS]". 
-    4. FORMATAÇÃO CLEAN PARA ATS: Use APENAS cabeçalhos (H3 e Negrito), textos simples e bullet points clássicos (- ou *). NUNCA use tabelas ou caracteres complexos.
-    5. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque em destacar as habilidades e experiências que provam que o candidato é apto para a vaga, sem mencionar níveis de senioridade.
-    6. ADICIONE VALOR: Mostre que os projetos e experiências trouxeram resultados concretos, usando números e métricas sempre que possível. Isso é mais importante do que simplesmente listar responsabilidades.
-    7. FALE A MESMA LINGUAGEM DA VAGA: Se a vaga enfatiza certas habilidades ou termos, certifique-se de que eles estejam presentes no currículo de forma natural. O objetivo é passar pelo filtro do ATS, então a correspondência de palavras-chave é crucial.
-    8. NÃO SE ESQUEÇA: Eu sou homem, então use pronomes masculinos. Mantenha a essência do meu perfil, mas otimize para a vaga.
-
-    REGRAS DE ESTRATÉGIA ATS (EVITAR KEYWORD STUFFING E GAPS):
-    1. TRADUÇÃO DE HABILIDADES TRANSFERÍVEIS: Se a vaga pedir ferramentas específicas que não estão no CONTEÚDO_BASE, NÃO minta. Reescreva a experiência destacando as bases técnicas que provam que o candidato pode aprender essas ferramentas rápido.
-    2. PROIBIÇÃO DE 'KEYWORD STUFFING': Não crie listas de "Skills" com palavras da vaga que não estejam justificadas nas experiências profissionais com a Fórmula XYZ.
-    3. SINCERIDADE ESTRATÉGICA: Se a vaga exige níveis específicos de idiomas (ex: Inglês C1), mantenha o nível real do candidato, mas adicione contexto de uso prático (ex: "Leitura técnica avançada").
-    4. FOCO NO DOMÍNIO DA VAGA: Reduza o destaque de projetos acadêmicos e foque na arquitetura técnica que mais se assemelha à vaga.
-    5. NUNCA, NUNCA MESMO, invente experiências ou habilidades. Se algo não está no CONTEÚDO_BASE, reescreva a experiência mais próxima de forma convincente, mas sem mentir. A honestidade é a melhor política para evitar reprovações por ATS.
-    6. MANTENHA A ESSÊNCIA DO CANDIDATO: O objetivo é otimizar o currículo para passar pelo ATS, mas sem perder a autenticidade do candidato. O CV deve parecer uma evolução natural do conteúdo base, não uma versão fabricada.
-    7. REGRA DE TAMANHO (1 PÁGINA): O currículo DEVE obrigatoriamente caber numa única página. Para isso, seja extremamente conciso. Use no máximo 3 a 4 bullet points curtos por experiência. Remova adjetivos desnecessários e vá direto ao ponto métrico. O texto inteiro não deve ultrapassar 350 palavras.
+    Você receberá: CONTEÚDO_BASE (CV original), ANÁLISE_ESTRATÉGICA (análise da vaga), 
+    TERMOS_ATS (keywords extraídas) e VAGA_ORIGINAL (descrição completa).
+    
+    === FRAMEWORK DE REESCRITA ===
+    
+    PASSO 1 — RESUMO PROFISSIONAL (3 linhas máximo):
+    - Abra com a identidade profissional alinhada à vaga (não "Analista de Dados" se a vaga é AI Engineer)
+    - Mencione 2-3 competências ESSENCIAIS da vaga usando a terminologia EXATA da vaga
+    - Feche com um diferencial concreto (ex: "com experiência prática em deploy de LLMs em produção")
+    - ADAPTE o tom ao tom da vaga (indicado na ANÁLISE_ESTRATÉGICA)
+    
+    PASSO 2 — EXPERIÊNCIA (Método CAR: Contexto-Ação-Resultado):
+    - Cada bullet point deve seguir: "[Ação com verbo forte] [o que fez] resultando em [impacto observável]"
+    - Use APENAS métricas que podem ser inferidas logicamente do trabalho real:
+      ✅ "Reduziu dependência de APIs externas implementando LLMs locais" (fato)
+      ❌ "Melhorou eficiência em 30%" (número inventado — red flag para recrutadores)
+    - RECONTEXTUALIZE experiências para a área da vaga:
+      Se a vaga é Supply Chain e o candidato tem experiência com pipelines de dados,
+      destaque "automação de pipelines de processamento" não "biologia computacional"
+    - Use os VERBOS e SUBSTANTIVOS da vaga (ATS match + linguagem familiar ao recrutador)
+    
+    PASSO 3 — PROJETOS (selecione os mais relevantes):
+    - Inclua NO MÁXIMO 2 projetos, os mais relevantes para a vaga
+    - Para cada projeto, destaque a ARQUITETURA e TECNOLOGIAS que fazem match com a vaga
+    - Se nenhum projeto é relevante, reframe o mais próximo focando nos patterns transferíveis
+    
+    PASSO 4 — HABILIDADES:
+    - Técnicas: Liste PRIMEIRO as que aparecem nos requisitos essenciais da vaga
+    - Adicione habilidades correlatas reais (não invente)
+    - Idiomas: Mantenha o nível real. Se o nível requerido é maior, adicione contexto:
+      "Inglês Intermediário (leitura e escrita técnica avançada, documentação diária em inglês)"
+    
+    === REGRAS INVIOLÁVEIS ===
+    
+    1. NUNCA invente experiência, certificação, ou métrica que não existe no CONTEÚDO_BASE
+    2. NUNCA use "keyword stuffing" — cada skill mencionada DEVE estar justificada por uma experiência
+    3. NUNCA exceda 1 página (máximo 400 palavras de conteúdo)
+    4. NUNCA use linguagem genérica de IA ("contribuindo para melhorias contínuas", 
+       "otimizando processos de forma eficiente") — recrutadores detectam isso instantaneamente
+    5. USE pronomes masculinos (o candidato é homem)
+    6. MANTENHA formatação ATS-safe: H3, negrito, bullet points simples. Sem tabelas, sem emojis, sem colunas.
+    7. Contato SEMPRE centralizado no topo: Nome, Email, Telefone, Local, LinkedIn, GitHub
+    8. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque nas habilidades.
+    9. SIGA a ESTRATÉGIA DO ANALISTA fornecida na ANÁLISE_ESTRATÉGICA
+    
+    === ANTI-PADRÕES (evite a todo custo) ===
+    
+    ❌ "Profissional com experiência em..." → genérico demais
+    ❌ "Contribuindo para melhorias operacionais contínuas" → jargão vazio de IA
+    ❌ "Melhorou eficiência em X%" sem base real → métrica inventada
+    ❌ "Otimizando processos de forma eficiente" → pleonasmo detectável como IA
+    ❌ Listar 15 skills sem contexto → keyword stuffing
+    ❌ Copiar verbatim trechos da descrição da vaga → flagrante para recrutador
+    
+    === PADRÕES POSITIVOS ===
+    
+    ✅ "Engenheiro de IA com foco em sistemas multi-agentes e deploy de LLMs" → específico
+    ✅ "Implementei LLMs locais (Ollama, Llama.cpp) em cluster HPC, eliminando dependência 
+        de APIs externas" → fato concreto, tecnologias específicas
+    ✅ "Desenvolvi API REST com FastAPI para automação de captação de leads, 
+        monitorando interações em tempo real" → ação + resultado observável
     """
 )
 
@@ -225,32 +342,84 @@ agente_envio = Agent(
 def pipeline_cv(termos_ats: list) -> str:
     """
     Executa o pipeline completo de otimização de currículo.
+    Agora com: análise estratégica, gate de fit score, score semântico,
+    e tracking de candidaturas.
 
     Args:
-        termos_ats: Palavras-chave extraídas da vaga pelo sistema ATS.
+        termos_ats: Lista de vagas extraídas pelo Playwright.
 
     Returns:
-        Confirmação do PDF gerado.
+        Confirmação do pipeline.
     """
 
-    for _, termo in enumerate(termos_ats):
+    # Lê o CV base UMA VEZ (não precisa ler a cada vaga)
+    print("\n📄 Lendo currículo base...")
+    resultado_leitura = agente_leitor.run("Leia o currículo base agora.")
+    pprint_run_response(resultado_leitura)
+    conteudo_base = resultado_leitura.content
+
+    vagas_aplicadas = 0
+    vagas_ignoradas = 0
+
+    for idx, termo in enumerate(termos_ats):
         print("="*60)
-        print(f"\n[1/5] Analisando a Vaga: {termo['title']}\n URL: {termo['url']}")
+        print(f"\n[VAGA {idx+1}/{len(termos_ats)}] {termo['title']}")
+        print(f"  Empresa: {termo.get('company', 'N/A')}")
+        print(f"  URL: {termo['url']}")
+        print("="*60)
+
+        # ═══════════════════════════════════════════════════════════
+        # ETAPA 0: ANÁLISE ESTRATÉGICA DA VAGA (NOVO!)
+        # ═══════════════════════════════════════════════════════════
+        print("\n[0/5] 🔍 Análise estratégica da vaga...")
+        try:
+            analise = analista_vaga.run(f"""
+                TÍTULO DA VAGA: {termo['title']}
+                EMPRESA: {termo.get('company', 'N/A')}
+                LOCALIZAÇÃO: {termo.get('location', 'N/A')}
+                
+                DESCRIÇÃO COMPLETA:
+                {termo['description']}
+            """)
+            analise_data = analise.content
+            
+            print(f"  📊 Fit Score: {analise_data.fit_score}%")
+            print(f"  🎯 Senioridade: {analise_data.senioridade}")
+            print(f"  💼 Área: {analise_data.area_atuacao}")
+            print(f"  🏠 Modelo: {analise_data.modelo_trabalho}")
+            print(f"  🗣️ Idioma: {analise_data.idioma_requerido}")
+            print(f"  🔴 Gaps: {', '.join(analise_data.gaps_criticos) if analise_data.gaps_criticos else 'Nenhum'}")
+
+            # GATE: Não aplicar para vagas com fit < 30
+            if analise_data.fit_score < 30:
+                print(f"\n  ⏭️ IGNORADA — Fit score muito baixo ({analise_data.fit_score}%)")
+                print(f"  Gaps críticos: {', '.join(analise_data.gaps_criticos)}")
+                registrar_candidatura(
+                    vaga=termo, status="ignorada",
+                    fit_score=analise_data.fit_score,
+                    motivo=f"Fit {analise_data.fit_score}% - Gaps: {', '.join(analise_data.gaps_criticos)}"
+                )
+                vagas_ignoradas += 1
+                continue
+                
+        except Exception as e:
+            print(f"  ⚠️ Erro na análise estratégica: {str(e)[:60]}")
+            print("  Continuando com pipeline padrão...")
+            analise_data = None
+
+        # ═══════════════════════════════════════════════════════════
+        # ETAPA 1: EXTRAÇÃO DE KEYWORDS (mantém pipeline original)
+        # ═══════════════════════════════════════════════════════════
+        print(f"\n[1/5] Extraindo keywords ATS...")
         spacy_terms = extract_entities(termo["description"])
         keybert_terms = extrator_keywords_keybert(termo["description"])
-        print("DEBUG: Termos Spacy:", spacy_terms)
-        print("DEBUG: Termos KeyBERT:", keybert_terms)
 
         combined = list(set(spacy_terms + keybert_terms))
-        print("DEBUG: Termos combinados:", combined)
-
-        cleaned_terms = pre_process_pipeline(combined) # Limpeza prévia para remover ruídos óbvios antes de passar para o agente
+        cleaned_terms = pre_process_pipeline(combined)
 
         if not cleaned_terms:
-            print("⚠️ ATENÇÃO: Nenhum termo técnico relevante foi extraído da vaga. O pipeline continuará, mas a otimização ATS pode ser prejudicada.")
-            cleaned_terms = combined # Se não sobrar nada, tenta mandar o combined para o LLM mesmo
-
-        print("Termos extraídos:", cleaned_terms)
+            print("⚠️ Nenhum termo extraído, usando combinados brutos.")
+            cleaned_terms = combined
 
         resultado_classificador = analista_classificador.run(cleaned_terms)
         pprint_run_response(resultado_classificador)
@@ -263,28 +432,42 @@ def pipeline_cv(termos_ats: list) -> str:
             ats_data.soft_skills +
             ats_data.desejaveis
         )
-
         pprint_run_response(resultado_ats)
-        print("\n[2/5] Acionando o Agente Redator...")
-        # O comando inicial que dá o gatilho para a IA trabalhar sozinha
-        resultado_leitura = agente_leitor.run("Leia o currículo base agora.")
-        pprint_run_response(resultado_leitura)
-        conteudo_base = resultado_leitura.content
 
-        # ETAPA 2: Redação otimizada
-        print("\n[3/5] Reescrevendo CV para ATS...")
+        # ═══════════════════════════════════════════════════════════
+        # ETAPA 2: REDAÇÃO OTIMIZADA (com análise estratégica)
+        # ═══════════════════════════════════════════════════════════
+        print("\n[2/5] Reescrevendo CV para ATS...")
 
         ats_satisfeito = False
         resultado_redacao = ""
-        feedback_do_juiz = "" 
+        feedback_do_juiz = ""
         
-        # Extrai as listas do objeto Pydantic
-        termos_formatados = ", ".join(todas_keywords) # Transforma em texto para o Redator ler
+        termos_formatados = ", ".join(todas_keywords)
+
+        # Monta bloco de análise estratégica para o prompt
+        analise_bloco = ""
+        if analise_data:
+            analise_bloco = f"""
+                ANÁLISE_ESTRATÉGICA:
+                - Senioridade detectada: {analise_data.senioridade}
+                - Área de atuação: {analise_data.area_atuacao}
+                - Tom da vaga: {analise_data.tom_da_vaga}
+                - Fit Score: {analise_data.fit_score}%
+                - Requisitos Essenciais: {', '.join(analise_data.requisitos_essenciais)}
+                - Requisitos Desejáveis: {', '.join(analise_data.requisitos_desejaveis)}
+                - Habilidades Transferíveis: {', '.join(analise_data.habilidades_transferiveis)}
+                - Gaps Críticos: {', '.join(analise_data.gaps_criticos) if analise_data.gaps_criticos else 'Nenhum'}
+                - Idioma Requerido: {analise_data.idioma_requerido}
+                - ESTRATÉGIA DO ANALISTA: {analise_data.estrategia_cv}
+            """
 
         while not ats_satisfeito:
             prompt_redacao = f"""
                 VAGA_ORIGINAL:
                 {termo['description']}
+                
+                {analise_bloco}
 
                 CONTEÚDO_BASE:
                 {conteudo_base}
@@ -300,8 +483,17 @@ def pipeline_cv(termos_ats: list) -> str:
             resposta_redacao = agente_redator.run(prompt_redacao)
             texto_cv_gerado = resposta_redacao.content
 
-            # 2. Avaliação Matemática (passando a lista diretamente!)
-            feedback_ats, _ = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=todas_keywords)
+            # 2. Avaliação com score combinado (keyword + semântico)
+            try:
+                feedback_ats, score_final = avaliar_score_combinado(
+                    cv_text=texto_cv_gerado,
+                    keywords=todas_keywords,
+                    job_description=termo['description']
+                )
+            except Exception:
+                # Fallback para keyword-only se semântico falhar
+                feedback_ats, _ = tool_avaliar_score_ats(cv_text=texto_cv_gerado, keywords=todas_keywords)
+                score_final = 0
 
             print("\n📊 --- RESULTADO DO ALGORITMO ATS ---")
             print(feedback_ats)
@@ -319,27 +511,50 @@ def pipeline_cv(termos_ats: list) -> str:
 
         redacao = extrair_bloco_markdown(resultado_redacao)  # Limpa o output para pegar só o markdown
 
+        # ═══════════════════════════════════════════════════════════
+        # ETAPA 3: SALVAR E CONVERTER
+        # ═══════════════════════════════════════════════════════════
+        print("\n[3/5] Salvando CV otimizado...")
         resultado_md = agente_copia_cola.run(f"Pegue o nome da vaga {termo['title']} e o conteúdo {redacao}")
         pprint_run_response(resultado_md)
-        nome_arquivo = resultado_md.content  # ex: "cv_otimizado.md"
+        nome_arquivo = resultado_md.content
 
-        # ETAPA 4: Conversão para PDF
         print("\n[4/5] Convertendo para PDF...")
         prompt_conversao = f"Converta o arquivo '{nome_arquivo}' para PDF agora."
         resultado_conversao = agente_conversor.run(prompt_conversao)
 
-        print("\n✅ Pipeline concluído.")
-        print(f"PDF gerado: {resultado_conversao.content}")
+        print(f"\n✅ PDF gerado: {resultado_conversao.content}")
 
+        # ═══════════════════════════════════════════════════════════
+        # ETAPA 4: ENVIO
+        # ═══════════════════════════════════════════════════════════
         print("\n[5/5] Acionando o Agente de Envio...")
         prompt_envio = f"Envie o arquivo '{resultado_conversao.content}' para a vaga {termo['url']}."
         print(prompt_envio)
         agente_envio.run(prompt_envio)
 
-    print("\n✅ Pipeline concluído.")
+        # Registra candidatura no tracking
+        registrar_candidatura(
+            vaga=termo,
+            status="enviada",
+            cv_usado=str(nome_arquivo),
+            fit_score=analise_data.fit_score if analise_data else None
+        )
+        vagas_aplicadas += 1
+
+    # ═══════════════════════════════════════════════════════════
+    # RELATÓRIO FINAL
+    # ═══════════════════════════════════════════════════════════
+    print("\n" + "="*60)
+    print("✅ PIPELINE CONCLUÍDO")
+    print(f"  Vagas processadas: {len(termos_ats)}")
+    print(f"  Candidaturas enviadas: {vagas_aplicadas}")
+    print(f"  Vagas ignoradas (fit baixo): {vagas_ignoradas}")
+    print("="*60)
+
+    # Exibe relatório acumulado
+    print(gerar_relatorio())
 
 if __name__ == "__main__":
     print("Iniciando o pipeline de otimização de currículo...\n")
-    # print(f"Vaga escolhida para otimização: {vagas_escolhidas[-1]['titulo']}\n{vagas_escolhidas[-1]['descricao']}")
     pipeline_cv(termos_ats=vagas_escolhidas)
-    # print(vagas_escolhidas[-1]["description"])

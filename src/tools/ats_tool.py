@@ -1,6 +1,7 @@
 import spacy
 # from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 import json
 
 # O modelo PT é necessário pois possui o parser gramatical (noun_chunks) que extrai os jargões
@@ -8,9 +9,47 @@ import json
 nlp = spacy.load("pt_core_news_sm")
 COUNT = 0
 
+# Mapa de sinônimos/variações comuns para keyword matching inteligente
+SYNONYM_MAP = {
+    "ml": ["machine learning", "aprendizado de máquina"],
+    "machine learning": ["ml", "aprendizado de máquina"],
+    "ai": ["artificial intelligence", "inteligência artificial", "ia"],
+    "ia": ["artificial intelligence", "inteligência artificial", "ai"],
+    "dl": ["deep learning", "aprendizado profundo"],
+    "deep learning": ["dl", "aprendizado profundo"],
+    "nlp": ["natural language processing", "processamento de linguagem natural", "pln"],
+    "js": ["javascript"],
+    "javascript": ["js"],
+    "ts": ["typescript"],
+    "typescript": ["ts"],
+    "k8s": ["kubernetes"],
+    "kubernetes": ["k8s"],
+    "ci/cd": ["cicd", "continuous integration", "integração contínua"],
+    "aws": ["amazon web services"],
+    "gcp": ["google cloud platform", "google cloud"],
+    "devops": ["dev ops"],
+    "sql": ["structured query language"],
+    "nosql": ["no-sql", "non-relational"],
+    "api": ["apis", "rest api", "restful"],
+    "llm": ["llms", "large language model", "large language models"],
+    "llms": ["llm", "large language model", "large language models"],
+    "rag": ["retrieval augmented generation"],
+    "erp": ["enterprise resource planning"],
+    "scm": ["supply chain management"],
+}
+
+def _keyword_found_with_synonyms(kw_lower: str, cv_lower: str) -> bool:
+     """Verifica se a keyword ou algum sinônimo dela está presente no CV."""
+     if kw_lower in cv_lower:
+          return True
+     # Checa sinônimos
+     synonyms = SYNONYM_MAP.get(kw_lower, [])
+     return any(syn.lower() in cv_lower for syn in synonyms)
+
 def tool_avaliar_score_ats(cv_text: str, keywords: list) -> tuple[str, int]:
      """
-     Avalia a aderência do CV procurando a correspondência exata das palavras-chave da vaga.
+     Avalia a aderência do CV procurando correspondência das palavras-chave da vaga.
+     Agora com suporte a sinônimos (ex: ML ↔ Machine Learning).
      """
 
      global COUNT
@@ -19,7 +58,7 @@ def tool_avaliar_score_ats(cv_text: str, keywords: list) -> tuple[str, int]:
      if not keywords:
           return "AVALIAÇÃO APROVADA. Nenhuma palavra-chave técnica específica encontrada para cobrar.", COUNT
 
-     # Verifica quais palavras estão no CV
+     # Verifica quais palavras estão no CV (com sinônimos)
      encontradas = []
      faltantes = []
 
@@ -27,7 +66,7 @@ def tool_avaliar_score_ats(cv_text: str, keywords: list) -> tuple[str, int]:
           kw_lower = kw.strip().lower()
           if not kw_lower: continue
           
-          if kw_lower in cv_lower:
+          if _keyword_found_with_synonyms(kw_lower, cv_lower):
                encontradas.append(kw)
           else:
                faltantes.append(kw)
@@ -37,7 +76,7 @@ def tool_avaliar_score_ats(cv_text: str, keywords: list) -> tuple[str, int]:
      score_porcentagem = round((len(encontradas) / total_palavras) * 100, 2) if total_palavras > 0 else 0
 
      # Gera o Feedback
-     feedback = f"O Score ATS atual é: {score_porcentagem}% ({len(encontradas)}/{total_palavras} termos encontrados).\n"
+     feedback = f"O Score ATS (keyword) atual é: {score_porcentagem}% ({len(encontradas)}/{total_palavras} termos encontrados).\n"
 
      if COUNT == 10:
           feedback += "\nAVISO: Você atingiu o limite de 10 avaliações. Por favor, Envie o curriculo da maneira que estiver."
@@ -62,6 +101,77 @@ def tool_avaliar_score_ats(cv_text: str, keywords: list) -> tuple[str, int]:
 
           
      return feedback, COUNT
+
+
+def avaliar_score_ats_semantico(cv_text: str, job_description: str) -> tuple[str, float]:
+     """
+     Avalia a aderência do CV à vaga usando similaridade semântica (embeddings)
+     em vez de keyword matching exato. Complementa o score de keywords.
+     """
+     from sentence_transformers import SentenceTransformer
+
+     _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+     # Divide o CV e a vaga em sentenças/chunks significativos
+     cv_sentences = [s.strip() for s in cv_text.split('\n') if len(s.strip()) > 20]
+     job_sentences = [s.strip() for s in job_description.split('\n') if len(s.strip()) > 20]
+
+     if not cv_sentences or not job_sentences:
+          return "Erro: texto insuficiente para análise semântica.", 0.0
+
+     # Gera embeddings
+     cv_embeddings = _embed_model.encode(cv_sentences)
+     job_embeddings = _embed_model.encode(job_sentences)
+
+     # Para cada requisito da vaga, encontra a melhor correspondência no CV
+     similarity_matrix = cosine_similarity(job_embeddings, cv_embeddings)
+
+     # Score = média das melhores correspondências de cada requisito
+     best_matches = similarity_matrix.max(axis=1)
+     overall_score = float(np.mean(best_matches)) * 100
+
+     # Identifica gaps (requisitos com baixa correspondência)
+     gaps = []
+     for i, score in enumerate(best_matches):
+          if score < 0.4:
+               gaps.append((job_sentences[i], round(score * 100, 1)))
+
+     feedback = f"Score Semântico ATS: {overall_score:.1f}%\n"
+     if gaps:
+          feedback += "\nGaps identificados (baixa correspondência semântica):\n"
+          for gap_text, gap_score in gaps[:5]:
+               feedback += f"  - [{gap_score}%] {gap_text[:80]}...\n"
+
+     return feedback, overall_score
+
+
+def avaliar_score_combinado(cv_text: str, keywords: list, job_description: str) -> tuple[str, float]:
+     """
+     Score combinado: 40% keyword matching + 60% semântico.
+     Retorna feedback detalhado e score final.
+     """
+     # Score de keywords
+     kw_feedback, _ = tool_avaliar_score_ats(cv_text, keywords)
+     cv_lower = cv_text.lower()
+     kw_encontradas = sum(1 for kw in keywords if _keyword_found_with_synonyms(kw.strip().lower(), cv_lower))
+     kw_score = (kw_encontradas / max(len(keywords), 1)) * 100
+
+     # Score semântico
+     sem_feedback, sem_score = avaliar_score_ats_semantico(cv_text, job_description)
+
+     # Combinação ponderada
+     score_final = (kw_score * 0.4) + (sem_score * 0.6)
+
+     feedback = (
+          f"=== AVALIAÇÃO COMBINADA ===\n"
+          f"Score Keyword (40%): {kw_score:.1f}%\n"
+          f"Score Semântico (60%): {sem_score:.1f}%\n"
+          f"SCORE FINAL: {score_final:.1f}%\n\n"
+          f"{kw_feedback}\n{sem_feedback}"
+     )
+
+     return feedback, score_final
+
 
 def extract_entities(text):
     doc = nlp(text)

@@ -201,9 +201,18 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
                 desc_elem = page.locator("#job-details")
                 description = desc_elem.inner_text() if desc_elem.count() > 0 else ""
 
+                # Extrai metadados adicionais da vaga
+                company_elem = page.locator(".job-details-jobs-unified-top-card__company-name")
+                company = company_elem.inner_text().strip() if company_elem.count() > 0 else "N/A"
+
+                location_elem = page.locator(".job-details-jobs-unified-top-card__bullet")
+                location = location_elem.first.inner_text().strip() if location_elem.count() > 0 else "N/A"
+
                 jobs_list.append({
                     "title": title,
-                    "description": description[:500],
+                    "description": description,  # SEM TRUNCAMENTO — texto completo da vaga
+                    "company": company,
+                    "location": location,
                     "url": job_url
                 })
 
