@@ -59,16 +59,30 @@ def _create_session(p=None):
 
     if email and password:
         try:
-            login = page.locator("input[name='session_key']")
-            login.fill(email)
-            senha = page.locator("input[name='session_password']")
-            senha.fill(password)
+            # O LinkedIn usa seletores diferentes dependendo de como a página de login é carregada
+            # Para a página /login, costuma ser id="username" e id="password"
+            # Para a homepage, costuma ser name="session_key" e name="session_password"
+            
+            # 1. Tenta preencher o email
+            if page.locator("input#username").count() > 0:
+                page.locator("input#username").fill(email)
+            else:
+                page.locator("input[name='session_key']").fill(email)
+                
+            # 2. Tenta preencher a senha
+            if page.locator("input#password").count() > 0:
+                page.locator("input#password").fill(password)
+            else:
+                page.locator("input[name='session_password']").fill(password)
+                
+            # 3. Clica no botão de submit
             page.locator("button[type='submit']").click()
-            print("🔑 Login com credenciais do .env")
+            
+            print("🔑 Login automático realizado com as credenciais do .env")
             page.wait_for_timeout(5000)
         except Exception as e:
             print(f"⚠️ Erro ao fazer login automático: {e}")
-            print("ℹ️ Faça login manualmente...")
+            print("ℹ️ Por favor, faça o login manualmente na janela do navegador que se abriu...")
             page.pause()
     else:
         print("ℹ️ Faça login manualmente no navegador que se abriu...")
