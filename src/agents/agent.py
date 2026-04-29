@@ -17,6 +17,7 @@ from src.tools.playwright_tool import buscar_multiplas_vagas, tool_envio_candida
 from src.tools.cv_tool import ler_cv_base_md, salvar_cv_otimizado_md, converter_md_para_pdf
 from src.tools.ats_tool import tool_avaliar_score_ats, extract_entities, extrator_keywords_keybert, pre_process_pipeline, avaliar_score_combinado
 from src.tools.tracking import registrar_candidatura, gerar_relatorio
+from src.tools.github_tool import extrair_repositorios_github
 
 MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))
 MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
@@ -212,6 +213,28 @@ agente_leitor = Agent(
     tools=[ler_cv_base_md],
 )
 
+agente_curador_github = Agent(
+    name="Curador de Projetos GitHub",
+    model=MODELO_INTELIGENTE,
+    description="Filtra os repositórios públicos do candidato com base na análise estratégica da vaga.",
+    instructions="""Você é um Curador Técnico de Portfólio. Sua função é receber a descrição de uma vaga e acionar a ferramenta extrair_repositorios_github para obter a lista completa de repositórios do candidato.
+    
+    1. Acione imediatamente a ferramenta `extrair_repositorios_github`.
+    2. Avalie rigorosamente quais repositórios têm REAL aderência técnica com os requisitos da vaga.
+    3. Escolha no MÁXIMO 2 repositórios que tenham Fit Técnico (ex: se pede Python/FastAPI, escolha projetos com essas linguagens).
+    4. Se nenhum projeto tiver relação COM A VAGA, você DEVE retornar APENAS a palavra "VAZIO" (em maiúsculas, sem nenhum outro texto, nem parênteses, nem "nenhum projeto"). NUNCA invente projetos.
+    5. Retorne os projetos formatados EXATAMENTE no padrão Markdown do currículo:
+       
+       ## PROJETOS
+       ### NOME DO PROJETO (SEM COLCHETES) — [Repositório](URL do repositório retornado)
+       *Desenvolvedor | [Período deduzido ou 'Recente']*
+       - [Bullet point 1 focado na tecnologia/arquitetura relevante para a vaga, usando o contexto extraído do README]
+       - [Bullet point 2]
+    
+    REGRA DE OURO: NÃO invente projetos que não estejam no retorno da ferramenta.""",
+    tools=[extrair_repositorios_github],
+)
+
 agente_redator = Agent(
     name="Redator de CV",
     model=MODELO_INTELIGENTE,
@@ -220,6 +243,11 @@ agente_redator = Agent(
     
     Você receberá: CONTEÚDO_BASE (CV original), ANÁLISE_ESTRATÉGICA (análise da vaga), 
     TERMOS_ATS (keywords extraídas) e VAGA_ORIGINAL (descrição completa).
+    
+    REGRA OBRIGATÓRIA DE LAYOUT: Independentemente do formato do CV de entrada, o CV otimizado 
+    DEVE seguir exatamente o template padrão definido no sistema. Não altere a estrutura, a ordem 
+    das seções, os nomes das seções, nem a formatação. Apenas substitua/adapte o conteúdo textual 
+    para incluir os termos ATS identificados na vaga.
     
     === FRAMEWORK DE REESCRITA ===
     
@@ -239,10 +267,11 @@ agente_redator = Agent(
       destaque "automação de pipelines de processamento" não "biologia computacional"
     - Use os VERBOS e SUBSTANTIVOS da vaga (ATS match + linguagem familiar ao recrutador)
     
-    PASSO 3 — PROJETOS (selecione os mais relevantes):
-    - Inclua NO MÁXIMO 2 projetos, os mais relevantes para a vaga
-    - Para cada projeto, destaque a ARQUITETURA e TECNOLOGIAS que fazem match com a vaga
-    - Se nenhum projeto é relevante, reframe o mais próximo focando nos patterns transferíveis
+    PASSO 3 — PROJETOS:
+    - O agente curador forneceu os projetos mais relevantes na variável PROJETOS_CURADOS.
+    - COPIE E COLE os projetos exatamente como fornecidos, posicionando a seção "## PROJETOS" IMEDIATAMENTE ABAIXO da seção "## EXPERIÊNCIA" (e antes da seção "## FORMAÇÃO").
+    - NUNCA INVENTE projetos nem "force" palavras-chave em projetos que não foram fornecidos. Se PROJETOS_CURADOS for "VAZIO" ou não trouxer projetos, NÃO crie a seção "## PROJETOS". Omita-a completamente do texto final. Não escreva "Nenhum projeto".
+    - FORMATAÇÃO MÁXIMA: Ao escrever os bullet points (na Experiência e Projetos), garanta que cada `- ` inicie em uma nova linha. NUNCA coloque múltiplos bullet points na mesma linha.
     
     PASSO 4 — HABILIDADES:
     - Técnicas: Liste PRIMEIRO as que aparecem nos requisitos essenciais da vaga
@@ -432,10 +461,29 @@ def pipeline_cv(termos_ats: list) -> str:
             ats_data.soft_skills +
             ats_data.desejaveis
         )
+
+        # FALLBACK: Se a extração falhou completamente, usar requisitos do Analista Estratégico
+        if not todas_keywords and analise_data:
+            print("⚠️ Extração automática falhou — usando requisitos do Analista Estratégico como fallback")
+            todas_keywords = list(set(
+                analise_data.requisitos_essenciais +
+                analise_data.requisitos_desejaveis
+            ))
+            print(f"  📋 {len(todas_keywords)} termos recuperados: {', '.join(todas_keywords[:10])}...")
+
         pprint_run_response(resultado_ats)
 
         # ═══════════════════════════════════════════════════════════
-        # ETAPA 2: REDAÇÃO OTIMIZADA (com análise estratégica)
+        # ETAPA 1.5: CURADORIA DINÂMICA DE PROJETOS GITHUB
+        # ═══════════════════════════════════════════════════════════
+        print("\n[1.5/5] Buscando e curando projetos do GitHub...")
+        prompt_curador = f"Vaga: {termo['title']}\nDescrição: {termo['description']}\nAnalise e retorne os projetos mais relevantes."
+        resultado_curadoria = agente_curador_github.run(prompt_curador)
+        projetos_curados = resultado_curadoria.content
+        pprint_run_response(resultado_curadoria)
+
+        # ═══════════════════════════════════════════════════════════
+        # ETAPA 2: REDAÇÃO OTIMIZADA (com análise estratégica e curadoria)
         # ═══════════════════════════════════════════════════════════
         print("\n[2/5] Reescrevendo CV para ATS...")
 
@@ -471,6 +519,9 @@ def pipeline_cv(termos_ats: list) -> str:
 
                 CONTEÚDO_BASE:
                 {conteudo_base}
+
+                PROJETOS_CURADOS:
+                {projetos_curados}
 
                 TERMOS_ATS EXIGIDOS:
                 {termos_formatados}

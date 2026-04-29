@@ -119,10 +119,27 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 
-        search_term_encoded = search_term.replace(" ", "%20")
-        search_url = f"{os.getenv('LINKEDIN_PREFIX')}{search_term_encoded}"
+        import urllib.parse
+        search_term_encoded = urllib.parse.quote(search_term)
+        base_prefix = os.getenv('LINKEDIN_PREFIX', 'https://www.linkedin.com/jobs/search/?f_AL=true&keywords=')
+        search_url = f"{base_prefix}{search_term_encoded}"
+
+        local_busca = os.getenv("LOCAL_BUSCA", "")
+        if local_busca:
+            import re
+            # Extrai apenas os números (ex: de "Brasil (106057199)" extrai "106057199")
+            match = re.search(r'\d+', local_busca)
+            if match:
+                geo_id = match.group()
+                search_url += f"&geoId={geo_id}"
+            else:
+                # Fallback caso o usuário digite texto livre
+                local_encoded = urllib.parse.quote(local_busca)
+                search_url += f"&location={local_encoded}"
 
         print(f"🔍 Buscando vagas: {search_term}")
+        if local_busca:
+            print(f"📍 Local: {local_busca}")
         page.goto(search_url)
 
         # ─────────────────────────────────────────────────────────────────

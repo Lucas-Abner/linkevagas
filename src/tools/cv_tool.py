@@ -17,20 +17,34 @@ def ler_cv_base_md() -> str:
     """
     Ferramenta para a IA ler o currículo base em formato Markdown.
     """
-    md = MarkItDown()
-    pdf_path = str(os.getenv("CV_PATH"))
-    pdf_md = md.convert(pdf_path)
-
-    conteudo_cv = pdf_md.text_content
-
-    caminho_md = pdf_path.replace(".pdf", ".md")
-    # display(Markdown(f"{caminho_md}"))
-
-    with open(caminho_md, "w", encoding="utf-8") as f:
-        f.write(conteudo_cv)
+    import os
+    
+    import json
+    
+    buscar_vaga = os.getenv("BUSCAR_VAGA", "").lower()
+    
+    # Determina o diretório base (src/cvs) a partir da localização de cv_tool.py (src/tools)
+    base_dir = os.path.join(os.path.dirname(__file__), "..", "cvs")
+    caminho_md = os.path.join(base_dir, "cv_base_ia.md") # Fallback default
+    mapping_path = os.path.join(base_dir, "cv_mapping.json")
+    
+    # Tenta ler o JSON de mapeamento
+    if os.path.exists(mapping_path):
+        try:
+            with open(mapping_path, "r", encoding="utf-8") as f:
+                mapping = json.load(f)
+            
+            # Verifica qual arquivo mapeia para as palavras-chave na vaga
+            for cv_file, keywords in mapping.items():
+                if any(keyword.lower() in buscar_vaga for keyword in keywords):
+                    caminho_md = os.path.join(base_dir, cv_file)
+                    break
+        except Exception as e:
+            print(f"Erro ao carregar o mapping de CVs: {e}")
 
     if not os.path.exists(caminho_md):
         return f"Erro: Arquivo {caminho_md} não encontrado. Por favor, crie este arquivo com as informações base."
+        
     with open(caminho_md, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -71,73 +85,87 @@ def converter_md_para_pdf(caminho_md: str) -> str:
                     }}
 
                     body {{
-                        font-family: 'Calibri', 'Helvetica Neue', Arial, sans-serif;
+                        font-family: 'Noto Sans', 'Segoe UI', Arial, sans-serif;
                         font-size: 10pt;
-                        line-height: 1.5;
-                        word-spacing: 0.04em;
-                        color: #222;
+                        line-height: 1.4;
+                        color: #1f2937;
                         margin: 0;
                         padding: 0;
                     }}
 
-                    /* ── Nome do candidato (h3 no topo) ── */
-                    h3:first-of-type {{
-                        font-size: 18pt;
+                    /* ── Nome do candidato ── */
+                    h1 {{
+                        font-family: 'Liberation Serif', 'Times New Roman', serif;
+                        font-size: 21pt;
                         font-weight: 700;
                         text-align: center;
                         text-transform: uppercase;
-                        letter-spacing: 0.08em;
-                        color: #1a1a1a;
+                        color: #000000;
                         margin: 0 0 2px 0;
                         padding: 0;
                     }}
 
-                    /* ── Títulos de seção (h3 restantes) ── */
-                    h3 {{
-                        font-size: 11pt;
+                    /* ── Títulos de seção (RESUMO, EXPERIÊNCIA) ── */
+                    h2 {{
+                        font-family: 'Liberation Serif', 'Times New Roman', serif;
+                        font-size: 13pt;
                         font-weight: 700;
                         text-transform: uppercase;
-                        letter-spacing: 0.06em;
-                        color: #1a1a1a;
-                        margin: 14px 0 6px 0;
-                        padding-bottom: 3px;
-                        border-bottom: 1.5px solid #333;
+                        color: #000000;
+                        margin: 16px 0 6px 0;
+                        padding: 0;
                     }}
 
-                    /* ── Separadores entre seções ── */
-                    hr {{
-                        border: none;
-                        height: 0;
-                        margin: 8px 0;
-                    }}
-
-                    /* ── Subtítulos em negrito (cargo, projeto) ── */
-                    strong {{
+                    /* ── Subtítulos de Experiência/Projetos ── */
+                    h3 {{
+                        font-family: 'Noto Sans', 'Segoe UI', Arial, sans-serif;
+                        font-size: 10.5pt;
                         font-weight: 700;
-                        font-size: 10pt;
-                        color: #111;
+                        color: #000000;
+                        margin: 10px 0 2px 0;
+                        padding: 0;
                     }}
 
-                    /* ── Parágrafos (contato, datas, etc.) ── */
-                    p {{
-                        margin: 3px 0 5px 0;
-                        color: #333;
+                    /* ── Cargo/Subtítulo no topo (strong dentro do parágrafo de contato) ── */
+                    h1 + p strong {{
+                        display: block;
+                        font-family: 'Noto Sans Mono', 'Courier New', monospace;
+                        font-size: 9.5pt;
+                        color: #4b5563;
+                        font-weight: normal;
+                        margin-bottom: 4px;
+                        text-transform: uppercase;
                     }}
 
-                    /* Linha logo após o nome (contato) — centro */
-                    h3:first-of-type + p {{
+                    /* ── Contato ── */
+                    h1 + p {{
                         text-align: center;
+                        font-family: 'Noto Sans Mono', 'Courier New', monospace;
                         font-size: 9pt;
-                        color: #555;
+                        color: #4b5563;
+                        margin-bottom: 12px;
+                        line-height: 1.5;
+                    }}
+
+                    /* ── Datas e Períodos (em itálico no md) ── */
+                    em {{
+                        font-family: 'Noto Sans Mono', 'Courier New', monospace;
+                        font-size: 8pt;
+                        color: #4b5563;
+                        font-style: normal;
+                        display: block;
                         margin-bottom: 4px;
                     }}
 
-                    /* Segunda linha de contato (links) */
-                    h3:first-of-type + p + p {{
-                        text-align: center;
-                        font-size: 9pt;
-                        color: #555;
-                        margin-bottom: 10px;
+                    /* ── Negrito genérico nas seções ── */
+                    strong {{
+                        font-weight: 700;
+                        color: #000000;
+                    }}
+
+                    /* ── Parágrafos gerais ── */
+                    p {{
+                        margin: 3px 0 5px 0;
                     }}
 
                     /* ── Listas (bullet points) ── */
@@ -148,33 +176,13 @@ def converter_md_para_pdf(caminho_md: str) -> str:
 
                     li {{
                         margin-bottom: 4px;
-                        line-height: 1.45;
-                        color: #333;
+                        line-height: 1.4;
                     }}
 
                     /* ── Links ── */
                     a {{
-                        color: #2563eb;
+                        color: #1f2937;
                         text-decoration: none;
-                    }}
-
-                    /* ── Headings não usados mas para segurança ── */
-                    h1 {{
-                        font-size: 18pt;
-                        text-align: center;
-                        margin: 0 0 4px 0;
-                        text-transform: uppercase;
-                        letter-spacing: 0.08em;
-                    }}
-
-                    h2 {{
-                        font-size: 12pt;
-                        font-weight: 700;
-                        text-transform: uppercase;
-                        letter-spacing: 0.05em;
-                        border-bottom: 1.5px solid #333;
-                        margin: 14px 0 6px 0;
-                        padding-bottom: 3px;
                     }}
                 </style>
             </head>

@@ -173,15 +173,69 @@ def avaliar_score_combinado(cv_text: str, keywords: list, job_description: str) 
      return feedback, score_final
 
 
-def extract_entities(text):
-    doc = nlp(text)
+def _detect_language(text: str) -> str:
+    """Detecta se o texto é predominantemente em inglês ou português."""
+    en_markers = ["the ", "and ", "with ", "for ", "you ", "will ", "are ", "this ", "that ", "have ",
+                  "requirements", "responsibilities", "experience", "looking for", "about the"]
+    pt_markers = ["você ", "para ", "com ", "requisitos", "responsabilidades", "experiência",
+                  "sobre a vaga", "estamos buscando", "habilidades"]
+    
+    text_lower = text.lower()
+    en_count = sum(1 for m in en_markers if m in text_lower)
+    pt_count = sum(1 for m in pt_markers if m in text_lower)
+    
+    return "en" if en_count > pt_count else "pt"
 
+
+def _extract_terms_regex(text: str) -> list:
+    """Extração de termos por regex — fallback quando SpaCy não é adequado.
+    Captura termos técnicos, acrônimos e compostos capitalizados."""
+    import re
     termos = set()
-
-    for chunck in doc.noun_chunks:
-        termos.add(chunck.text.strip())
-
+    
+    # 1. Acrônimos e termos em maiúsculas (AI, ML, NLP, SQL, etc.)
+    acronyms = re.findall(r'\b[A-Z]{2,}(?:\.[A-Z]+)*\b', text)
+    termos.update(acronyms)
+    
+    # 2. Termos compostos capitalizados ("Data Labeling", "Machine Learning")
+    capitalized = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b', text)
+    termos.update(capitalized)
+    
+    # 3. Termos técnicos com hífen ou barra ("Fact-Checking", "CI/CD")
+    hyphenated = re.findall(r'\b[A-Za-z]+-[A-Za-z]+\b', text)
+    termos.update(hyphenated)
+    
+    # 4. Palavras capitalizadas isoladas (potenciais termos técnicos)
+    single_caps = re.findall(r'\b[A-Z][a-z]{2,}\b', text)
+    # Filtra palavras comuns de início de frase
+    common_starts = {"The", "This", "That", "What", "Where", "When", "How", "Who",
+                     "Our", "Your", "Their", "Some", "Any", "All", "Each", "Every",
+                     "And", "But", "Not", "Are", "Were", "Was", "Has", "Had",
+                     "Will", "Can", "May", "Must", "Should", "Could", "Would",
+                     "About", "Over", "Under", "With", "From", "Into", "Also",
+                     "Como", "Para", "Sobre", "Uma", "Nosso", "Nossa", "Você"}
+    for w in single_caps:
+        if w not in common_starts:
+            termos.add(w)
+    
     return list(termos)
+
+
+def extract_entities(text):
+    """Extrai entidades do texto usando SpaCy (PT) ou regex (EN)."""
+    lang = _detect_language(text)
+    
+    if lang == "pt":
+        # SpaCy PT funciona bem para português
+        doc = nlp(text)
+        termos = set()
+        for chunk in doc.noun_chunks:
+            termos.add(chunk.text.strip())
+        return list(termos)
+    else:
+        # Para inglês, SpaCy PT não funciona — usar regex
+        print("  ℹ️ Texto em inglês detectado — usando extração por regex")
+        return _extract_terms_regex(text)
 
 from keybert import KeyBERT
 from nltk.corpus import stopwords
@@ -202,6 +256,14 @@ def extrator_keywords_keybert(text):
 
     return [kw[0] for kw in keywords]
 
+# Termos técnicos curtos que NUNCA devem ser filtrados
+PROTECTED_TERMS = {
+    "ai", "ml", "dl", "cv", "nlp", "qa", "ui", "ux", "db", "ci", "cd",
+    "api", "sql", "css", "git", "aws", "gcp", "rag", "llm", "hpc", "erp",
+    "scm", "etl", "rpa", "ocr", "gpu", "cpu", "sre", "iot", "bi",
+    "r", "c", "go",  # linguagens de programação de 1-2 chars
+}
+
 STOPWORDS_PT_EXTRA = {
     # PT
     "vaga", "sobre", "empresa", "você", "experiência", "conhecimento",
@@ -213,7 +275,10 @@ STOPWORDS_PT_EXTRA = {
     "skills", "work", "how", "for", "we", "our", "us",
     "will", "requirements", "differentials", "responsibilities", "benefits",
     "here", "identifying", "position", "act", "have", "looking", "seeking",
-    "candidate", "must", "strong", "preferred", "nice", "description", "apply"
+    "candidate", "must", "strong", "preferred", "nice", "description", "apply",
+    # Genéricos extras EN
+    "overview", "key", "join", "team", "help", "ensure", "able",
+    "access", "currently", "recent", "enrolled", "encouraged",
 }
 
 def clean_and_validate_term(term):
@@ -222,18 +287,23 @@ def clean_and_validate_term(term):
     # 1. Remover ruído de pontuação nas pontas
     term = term.strip(".,()/-*[]:")
     
+    # 0. Se é um termo técnico protegido, aceitar imediatamente
+    if term in PROTECTED_TERMS:
+        return term
+    
     words = term.split()
     
-    # 2. Se for muito longo (mais de 3 palavras), descartar
-    if len(words) > 3 or len(words) == 0:
+    # 2. Se for muito longo (mais de 4 palavras), descartar
+    if len(words) > 4 or len(words) == 0:
         return None
         
     # 3. Filtrar se TODAS as palavras estiverem nas stopwords
-    if all(w in STOPWORDS_PT_EXTRA or len(w) <= 2 for w in words):
+    #    Mas NÃO filtrar se alguma palavra for um termo protegido
+    if all((w in STOPWORDS_PT_EXTRA or len(w) <= 2) and w not in PROTECTED_TERMS for w in words):
         return None
         
-    # 4. Remover termos que começam com preposições quebradas ou verbos comuns
-    bad_starts = ["em ", "de ", "com ", "para ", "uma ", "um ", "in ", "of ", "with ", "to ", "a ", "an "]
+    # 4. Remover termos que começam com preposições quebradas
+    bad_starts = ["em ", "de ", "com ", "para ", "uma ", "um ", "in ", "of ", "with ", "to ", "an "]
     if any(term.startswith(bad) for bad in bad_starts):
         return None
         

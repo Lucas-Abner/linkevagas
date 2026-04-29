@@ -63,6 +63,23 @@ _FIELDS = [
         "hint": "",
     },
     {
+        "key": "LOCAL_BUSCA",
+        "label": "📍  Local da Vaga (geoId)",
+        "type": "combo",
+        "hint": 'Escolha na lista ou cole o geoId do LinkedIn (ex: 103451405)',
+        "options": [
+            "Mundial (92000000)",
+            "Brasil (106057199)",
+            "São Paulo (104746682)",
+            "Estados Unidos (103644278)",
+            "Portugal (100364837)",
+            "Japão (103451405)",
+            "Reino Unido (101165590)",
+            "Canadá (101174742)",
+            "Europa (100506914)"
+        ],
+    },
+    {
         "key": "MODELO_PRINCIPAL",
         "label": "🤖  Modelo Principal",
         "type": "combo",
