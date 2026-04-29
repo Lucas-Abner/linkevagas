@@ -287,8 +287,14 @@ agente_redator = Agent(
     4. NUNCA use linguagem genérica de IA ("contribuindo para melhorias contínuas", 
        "otimizando processos de forma eficiente") — recrutadores detectam isso instantaneamente
     5. USE pronomes masculinos (o candidato é homem)
-    6. MANTENHA formatação ATS-safe: H3, negrito, bullet points simples. Sem tabelas, sem emojis, sem colunas.
-    7. Contato SEMPRE centralizado no topo: Nome, Email, Telefone, Local, LinkedIn, GitHub
+    6. ESTRUTURA MARKDOWN OBRIGATÓRIA:
+       - `# NOME DO CANDIDATO` (Título 1 para o nome)
+       - O parágrafo imediatamente abaixo do nome deve conter os contatos (Email | Telefone | Local | LinkedIn | GitHub)
+       - `## NOME DA SEÇÃO` (Título 2 para RESUMO, EXPERIÊNCIA, PROJETOS, FORMAÇÃO, HABILIDADES)
+       - `### EMPRESA | CARGO` ou `### NOME DO PROJETO` (Título 3 para subtítulos)
+       - `*PERÍODO*` (Itálico logo abaixo do Título 3 para datas)
+       - `- Bullet points` simples para descrições.
+    7. SEMPRE centralize visualmente o contato no topo (o CSS cuidará disso se você usar `# NOME` seguido de um parágrafo).
     8. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque nas habilidades.
     9. SIGA a ESTRATÉGIA DO ANALISTA fornecida na ANÁLISE_ESTRATÉGICA
     

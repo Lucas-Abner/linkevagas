@@ -15,26 +15,45 @@ except ImportError:
 
 def ler_cv_base_md() -> str:
     """
-    Ferramenta para a IA ler o currículo base em formato Markdown.
+    Ferramenta para a IA ler o currículo base.
+    Prioriza o arquivo selecionado no GUI (CV_PATH no .env).
     """
-    import os
+    cv_path_env = os.getenv("CV_PATH")
     
-    import json
-    
+    # 1. Tenta usar o arquivo definido no CV_PATH (selecionado no GUI)
+    if cv_path_env and os.path.exists(cv_path_env):
+        print(f"📖 Lendo currículo de: {cv_path_env}")
+        
+        # Se for PDF, extrai o texto
+        if cv_path_env.lower().endswith(".pdf"):
+            try:
+                reader = PdfReader(cv_path_env)
+                texto_pdf = ""
+                for page in reader.pages:
+                    texto_pdf += page.extract_text() + "\n"
+                return texto_pdf
+            except Exception as e:
+                print(f"⚠️ Erro ao ler PDF {cv_path_env}: {e}")
+        
+        # Se for MD ou outro texto, lê diretamente
+        try:
+            with open(cv_path_env, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as e:
+            print(f"⚠️ Erro ao ler arquivo {cv_path_env}: {e}")
+
+    # 2. Fallback: Lógica original de mapeamento em src/cvs/
+    print("🔍 CV_PATH não encontrado ou inválido. Usando lógica de fallback...")
     buscar_vaga = os.getenv("BUSCAR_VAGA", "").lower()
-    
-    # Determina o diretório base (src/cvs) a partir da localização de cv_tool.py (src/tools)
     base_dir = os.path.join(os.path.dirname(__file__), "..", "cvs")
-    caminho_md = os.path.join(base_dir, "cv_base_ia.md") # Fallback default
+    caminho_md = os.path.join(base_dir, "cv_base_ia.md")
     mapping_path = os.path.join(base_dir, "cv_mapping.json")
     
-    # Tenta ler o JSON de mapeamento
     if os.path.exists(mapping_path):
         try:
+            import json
             with open(mapping_path, "r", encoding="utf-8") as f:
                 mapping = json.load(f)
-            
-            # Verifica qual arquivo mapeia para as palavras-chave na vaga
             for cv_file, keywords in mapping.items():
                 if any(keyword.lower() in buscar_vaga for keyword in keywords):
                     caminho_md = os.path.join(base_dir, cv_file)
@@ -42,11 +61,11 @@ def ler_cv_base_md() -> str:
         except Exception as e:
             print(f"Erro ao carregar o mapping de CVs: {e}")
 
-    if not os.path.exists(caminho_md):
-        return f"Erro: Arquivo {caminho_md} não encontrado. Por favor, crie este arquivo com as informações base."
-        
-    with open(caminho_md, "r", encoding="utf-8") as f:
-        return f.read()
+    if os.path.exists(caminho_md):
+        with open(caminho_md, "r", encoding="utf-8") as f:
+            return f.read()
+            
+    return "Erro: Nenhum currículo base encontrado. Por favor, selecione um PDF na interface ou crie um arquivo em src/cvs/cv_base_ia.md"
 
 def salvar_cv_otimizado_md(conteudo_md: str, nome_vaga: str) -> str:
     """
