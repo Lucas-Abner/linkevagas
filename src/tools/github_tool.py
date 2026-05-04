@@ -26,13 +26,13 @@ def _save_cache(repos):
             "repos": repos
         }, f, indent=2)
 
-def extrair_repositorios_github() -> str:
+def extrair_repositorios_github(github_username: str = "lucas-abner", **kwargs) -> str:
     """
     Ferramenta para a IA extrair e listar os repositórios públicos do GitHub do candidato (lucas-abner).
     Retorna uma lista estruturada contendo o Nome, Descrição, Linguagem, Tópicos e os primeiros 500
     caracteres do README de cada repositório.
     """
-    username = "lucas-abner"
+    username = github_username or "lucas-abner"
     cached_repos = _load_cache()
     if cached_repos is not None:
         return json.dumps(cached_repos, indent=2, ensure_ascii=False)

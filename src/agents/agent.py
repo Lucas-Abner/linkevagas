@@ -19,20 +19,28 @@ from src.tools.ats_tool import extract_entities, extrator_keywords_keybert, pre_
 from src.tools.tracking import registrar_candidatura, gerar_relatorio
 from src.tools.github_tool import extrair_repositorios_github
 
-MODEL_GPT = OpenAIResponses(id=os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini"), api_key=os.getenv("OPENAI_API_KEY"))
-MODEL_OLLAMA_QWEN2 = Ollama(id="qwen2.5:7b", host="http://localhost:11434", options={"temperature": 0.7, "num_gpu": 99})
+modelo_principal_id = os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini")
+
+if "gpt" in modelo_principal_id.lower() or "o1" in modelo_principal_id.lower() or "o3" in modelo_principal_id.lower():
+    MODEL_PRINCIPAL = OpenAIResponses(id=modelo_principal_id, api_key=os.getenv("OPENAI_API_KEY"))
+    # Se o principal for nuvem, o burocrático fallback será o mistral-nemo local
+    MODEL_LOCAL = Ollama(id="mistral-nemo:12b", host="http://localhost:11434", options={"temperature": 0.2, "num_gpu": 99})
+else:
+    # Se o usuário escolheu um modelo local como principal (ex: mistral-nemo:12b), usamos ele para tudo!
+    MODEL_PRINCIPAL = Ollama(id=modelo_principal_id, host="http://localhost:11434", options={"temperature": 0.2, "num_gpu": 99})
+    MODEL_LOCAL = MODEL_PRINCIPAL
 
 MODO_PROCESSAMENTO = os.getenv("MODO_PROCESSAMENTO", "Híbrido (Recomendado)")
 
 if MODO_PROCESSAMENTO == "100% Local (Ollama)":
-    MODELO_INTELIGENTE = MODEL_OLLAMA_QWEN2
-    MODELO_BUROCRATICO = MODEL_OLLAMA_QWEN2
+    MODELO_INTELIGENTE = MODEL_LOCAL
+    MODELO_BUROCRATICO = MODEL_LOCAL
 elif "Nuvem" in MODO_PROCESSAMENTO:
-    MODELO_INTELIGENTE = MODEL_GPT
-    MODELO_BUROCRATICO = MODEL_GPT
+    MODELO_INTELIGENTE = MODEL_PRINCIPAL
+    MODELO_BUROCRATICO = MODEL_PRINCIPAL
 else: # Híbrido
-    MODELO_INTELIGENTE = MODEL_GPT
-    MODELO_BUROCRATICO = MODEL_OLLAMA_QWEN2
+    MODELO_INTELIGENTE = MODEL_PRINCIPAL
+    MODELO_BUROCRATICO = MODEL_LOCAL
 
 
 buscar_vagas = os.environ.get("BUSCAR_VAGA", "Agente de IA")
@@ -153,21 +161,7 @@ analista_vaga = Agent(
 )
 
 
-agente_leitor = Agent(
-    name="Leitor de CV",
-    model=MODELO_INTELIGENTE,
-    description="Lê o currículo base em Markdown e retorna seu conteúdo íntegro.",
-    instructions="""You have a single responsibility: to retrieve the content of the base resume.
-
-    REQUIRED STEPS:
-    1. IMMEDIATELY activate the `ler_cv_base_md` tool.
-    2. Return the content EXACTLY as it was read, without changing a single word.
-    3. DO NOT perform any analysis, DO NOT rewrite, DO NOT add comments.
-
-    GOLDEN RULE: Your output must be identical to the read file. Zero creativity here.
-    """,
-    tools=[ler_cv_base_md],
-)
+# agente_leitor foi removido.
 
 agente_curador_github = Agent(
     name="Curador de Projetos GitHub",
@@ -277,53 +271,8 @@ agente_redator = Agent(
     """
 )
 
-# agente_juiz_ats REMOVIDO — scoring agora é feito inline via avaliar_score_combinado()
-# Isso elimina 1 chamada de LLM por iteração, reduzindo custo e latência.
-
-agente_copia_cola = Agent(
-    name="Copia e Cola",
-    model=MODELO_BUROCRATICO,
-    description="Agente intermediário para passar o nome do arquivo Markdown do Redator para o Conversor.",
-    instructions=f"""Você tem UMA única responsabilidade: receber o texto reescrito do Redator e salvar usando a ferramenta.
-
-    PASSOS OBRIGATÓRIOS:
-    1. Receba a redação, acione a ferramenta `salvar_cv_otimizado_md` passando o texto completo.
-    2. Passe no parametro da tool o nome da vaga, depois passe o nome do arquivo salvo para que o próximo agente possa usá-lo.
-    3. NÃO faça nada além disso. Zero criatividade extra. Sua missão é reescrever, não analisar ou comentar.
-    4. REGRA DE OURO: Passe somente o nome do arquivo salvo para o próximo agente, sem nenhum texto adicional. O output deve ser estritamente o nome do arquivo Markdown gerado (ex: "cv_otimizado.md").
-    """,
-    tools=[salvar_cv_otimizado_md]
-)
-
-agente_conversor = Agent(
-    name="Conversor de CV",
-    model=MODELO_BUROCRATICO,
-    description="Converte o arquivo Markdown otimizado em PDF final.",
-    instructions="""Você tem UMA única responsabilidade: converter o arquivo Markdown em PDF.
-
-    PASSOS OBRIGATÓRIOS:
-    1. Receba o nome do arquivo Markdown via prompt (fornecido pelo Redator de CV).
-    2. Acione IMEDIATAMENTE `converter_md_para_pdf` passando exatamente esse nome.
-    3. Confirme o caminho do PDF gerado.
-
-    REGRA DE OURO: NÃO altere o conteúdo do arquivo. NÃO leia o conteúdo.
-    Apenas converta e confirme a conclusão.
-    """,
-    tools=[converter_md_para_pdf],
-)
-
-agente_envio = Agent(
-    name = "Agente de Envio de Candidatura",
-    model = MODELO_BUROCRATICO,
-    description = "Agente responsável por enviar o currículo otimizado para a vaga usando automação de navegador.",
-    instructions = f"""Você tem UMA única responsabilidade: enviar o currículo otimizado para a vaga usando a ferramenta de automação de navegador.
-    PASSOS OBRIGATÓRIOS:
-    1. Receba o link da vaga e o nome do arquivo PDF otimizado.
-    2. Acione IMEDIATAMENTE a ferramenta `tool_envio_candidatura` passando o link da vaga e o caminho do PDF.
-    3. Confirme a conclusão do envio.
-    """,
-    tools=[tool_envio_candidatura]
-)
+# Os agentes burocráticos (Leitor, Copia e Cola, Conversor e Envio) foram removidos
+# Usaremos chamadas diretas às funções Python (muito mais rápido e sem erro).
 
 def pipeline_cv(termos_ats: list) -> str:
     """
@@ -340,9 +289,7 @@ def pipeline_cv(termos_ats: list) -> str:
 
     # Lê o CV base UMA VEZ (não precisa ler a cada vaga)
     print("\n📄 Lendo currículo base...")
-    resultado_leitura = agente_leitor.run("Leia o currículo base agora.")
-    pprint_run_response(resultado_leitura)
-    conteudo_base = resultado_leitura.content
+    conteudo_base = ler_cv_base_md()
 
     vagas_aplicadas = 0
     vagas_ignoradas = 0
@@ -434,7 +381,7 @@ def pipeline_cv(termos_ats: list) -> str:
         # ═══════════════════════════════════════════════════════════
         print("\n[2/5] Reescrevendo CV para ATS...")
 
-        MAX_RETRIES = 20
+        MAX_RETRIES = 10
         melhor_score = 0
         melhor_cv = ""
         resultado_redacao = ""
@@ -528,23 +475,20 @@ def pipeline_cv(termos_ats: list) -> str:
         # ETAPA 3: SALVAR E CONVERTER
         # ═══════════════════════════════════════════════════════════
         print("\n[3/5] Salvando CV otimizado...")
-        resultado_md = agente_copia_cola.run(f"Pegue o nome da vaga {termo['title']} e o conteúdo {redacao}")
-        pprint_run_response(resultado_md)
-        nome_arquivo = resultado_md.content
+        nome_arquivo = salvar_cv_otimizado_md(conteudo_md=redacao, nome_vaga=termo['title'])
+        print(f"Salvo em: {nome_arquivo}")
 
         print("\n[4/5] Convertendo para PDF...")
-        prompt_conversao = f"Converta o arquivo '{nome_arquivo}' para PDF agora."
-        resultado_conversao = agente_conversor.run(prompt_conversao)
-
-        print(f"\n✅ PDF gerado: {resultado_conversao.content}")
+        resultado_conversao = converter_md_para_pdf(nome_arquivo)
+        print(f"\n✅ PDF gerado: {resultado_conversao}")
 
         # ═══════════════════════════════════════════════════════════
         # ETAPA 4: ENVIO
         # ═══════════════════════════════════════════════════════════
         print("\n[5/5] Acionando o Agente de Envio...")
-        prompt_envio = f"Envie o arquivo '{resultado_conversao.content}' para a vaga {termo['url']}."
-        print(prompt_envio)
-        agente_envio.run(prompt_envio)
+        pdf_arquivo = nome_arquivo.replace(".md", ".pdf")
+        print(f"Enviando arquivo '{pdf_arquivo}' para a vaga {termo['url']}")
+        tool_envio_candidatura(url_vaga=termo['url'], nome_cv=pdf_arquivo)
 
         # Registra candidatura no tracking
         registrar_candidatura(

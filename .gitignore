@@ -151,6 +151,7 @@ venv.bak/
 *.doc
 *.md
 **.json
+linkedin_session.json
 
 # Spyder project settings
 .spyderproject
