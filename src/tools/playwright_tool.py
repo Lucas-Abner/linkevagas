@@ -1,6 +1,4 @@
 from playwright.sync_api import sync_playwright
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
 import json
 import time
 import os
@@ -268,11 +266,19 @@ def _get_llm_response(question: str) -> str:
     Chama a LLM para obter resposta para qualquer pergunta do formulário.
     A LLM responde basicamente tudo exceto o CV.
     """
-    chat = ChatOllama(
-        base_url="http://localhost:11434",
-        model="qwen2.5:7b",
-        temperature=0.7
-    )
+    modelo_principal_id = os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini")
+    
+    if "gpt" in modelo_principal_id.lower() or "o1" in modelo_principal_id.lower() or "o3" in modelo_principal_id.lower():
+        from agno.models.openai import OpenAIResponses
+        model = OpenAIResponses(id=modelo_principal_id, api_key=os.getenv("OPENAI_API_KEY"))
+    elif "deepseek" in modelo_principal_id.lower():
+        from agno.models.deepseek import DeepSeek
+        model = DeepSeek(id=modelo_principal_id, api_key=os.getenv("DEEPSEEK_API_KEY"))
+    else:
+        from agno.models.ollama import Ollama
+        model = Ollama(id=modelo_principal_id, host="http://localhost:11434", options={"temperature": 0.7})
+        
+    from agno.agent import Agent
     
     system_prompt = """Você é um assistente especializado em preencher formulários de candidatura do LinkedIn para uma posição de AI Engineer Jr.
 
@@ -302,16 +308,13 @@ PROCESSO DE RESPOSTA:
 4. Sempre responda positivamente a perguntas sobre: LLMs, IA, automação, Python, disponibilidade imediata, termos e condições, relocation
 5. Se não souber, use o melhor palpite baseado no perfil do candidato"""
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("human", question)
-    ])
-
-    chain = prompt | chat
-    response = chain.invoke({"question": question})
-
-    content = response.content if hasattr(response, "content") else str(response)
-    return content.strip() if isinstance(content, str) else str(content).strip()
+    agent = Agent(
+        model=model,
+        instructions=system_prompt,
+    )
+    
+    response = agent.run(question)
+    return response.content.strip() if response and response.content else ""
 
 
 def _extract_field_question(modal, element, element_id: str) -> str:

@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import List
 from agno.models.openai import OpenAIResponses
 from agno.models.ollama import Ollama
+from agno.models.deepseek import DeepSeek
 from agno.models.message import Message
 from agno.eval.performance import PerformanceEval
 from agno.utils.pprint import pprint_run_response
@@ -24,6 +25,10 @@ modelo_principal_id = os.getenv("MODELO_PRINCIPAL", "gpt-4o-mini")
 if "gpt" in modelo_principal_id.lower() or "o1" in modelo_principal_id.lower() or "o3" in modelo_principal_id.lower():
     MODEL_PRINCIPAL = OpenAIResponses(id=modelo_principal_id, api_key=os.getenv("OPENAI_API_KEY"))
     # Se o principal for nuvem, o burocrático fallback será o mistral-nemo local
+    MODEL_LOCAL = Ollama(id="mistral-nemo:12b", host="http://localhost:11434", options={"temperature": 0.2, "num_gpu": 99})
+elif "deepseek" in modelo_principal_id.lower():
+    MODEL_PRINCIPAL = DeepSeek(id=modelo_principal_id, api_key=os.getenv("DEEPSEEK_API_KEY"))
+    # Fallback local igual ao da OpenAI
     MODEL_LOCAL = Ollama(id="mistral-nemo:12b", host="http://localhost:11434", options={"temperature": 0.2, "num_gpu": 99})
 else:
     # Se o usuário escolheu um modelo local como principal (ex: mistral-nemo:12b), usamos ele para tudo!
