@@ -199,18 +199,21 @@ agente_redator = Agent(
     Você receberá: TÍTULO_VAGA, CONTEÚDO_BASE (CV original), ANÁLISE_ESTRATÉGICA (análise da vaga), 
     TERMOS_ATS (keywords extraídas), PROJETOS_CURADOS e VAGA_ORIGINAL (descrição completa).
     
-    === REGRA DE LAYOUT ===
+    === REGRA DE LAYOUT E ESTRUTURA ATS ===
     O CV DEVE seguir o template padrão. Não altere estrutura, ordem ou nomes das seções.
+    Mantenha um formato "clean" e texto puro: evite colunas, ícones, tabelas ou quebras de layout complexas que confundem os robôs ATS. O formato deve ser simples, direto ao ponto e otimizado para extração de texto.
     
     === FRAMEWORK DE REESCRITA ===
     
     PASSO 1 — RESUMO PROFISSIONAL (2-3 linhas):
-    - ABRA com o cargo alinhado ao TÍTULO_VAGA (ex: se a vaga é "AI Engineer", use "AI Engineer")
-    - Mencione 2-3 competências ESSENCIAIS usando a terminologia EXATA da vaga
-    - FECHE com diferencial verificável: "com deploy de LLMs locais em produção via Ollama"
+    - ABRA com o cargo ESTREITAMENTE alinhado ao TÍTULO_VAGA (é vital para o robô identificar a aderência)
+    - Destaque as palavras-chave mais críticas da vaga
+    - Apresente RESULTADOS QUANTIFICADOS ou diferenciais verificáveis logo de início
     
-    PASSO 2 — EXPERIÊNCIA (Método CAR rígido):
-    Cada bullet DEVE seguir: [VERBO FORTE no passado] + [o que fez com qual tecnologia] + [resultado concreto]
+    PASSO 2 — EXPERIÊNCIA PROFISSIONAL:
+    - Use sempre VERBOS DE AÇÃO no passado (Desenvolvi, Implementei, Liderou).
+    - Foque em RESULTADOS E IMPACTOS gerados para o negócio, NUNCA apenas liste tarefas.
+    - Personalização cirúrgica: Utilize as MESMAS nomenclaturas e palavras-chave da descrição da vaga (microajuste para passar na triagem do ATS).
     
     EXEMPLOS CAR DO CANDIDATO (use como base, adapte para a vaga):
     ✅ "Implementei LLMs locais (Ollama, Llama.cpp) em cluster HPC, eliminando dependência de APIs externas"
@@ -223,15 +226,14 @@ agente_redator = Agent(
     - Posicione "## PROJETOS" logo após "## EXPERIÊNCIA" e antes de "## FORMAÇÃO"
     - Se PROJETOS_CURADOS for "VAZIO", omita a seção completamente
     
-    PASSO 4 — HABILIDADES:
-    - Liste PRIMEIRO as skills dos requisitos essenciais da vaga
-    - Adicione skills reais do candidato que complementam
-    - Idiomas: Mantenha nível real. Se a vaga pede mais, contextualize:
-      "Inglês Intermediário (documentação técnica diária, leitura de papers)"
+    PASSO 4 — HABILIDADES E CERTIFICAÇÕES:
+    - Liste PRIMEIRO as skills dos requisitos essenciais da vaga usando a nomenclatura exata.
+    - Cursos e Qualificações: Liste apenas certificações técnicas que sejam RELEVANTES para a vaga atual.
+    - Idiomas: Mantenha nível real. Se a vaga pede mais, contextualize.
     
     === REGRAS INVIOLÁVEIS ===
     
-    1. NUNCA invente experiência, certificação ou métrica
+    1. NUNCA invente experiência, cargo, empresa, certificação ou métrica. Você só pode adicionar palavras-chave dentro das experiências JÁ EXISTENTES no CONTEÚDO_BASE, e APENAS se fizer sentido no contexto. É preferível ter um score menor do que inventar informações.
     2. NUNCA exceda 350 palavras de conteúdo (garante 1 página A4)
     3. USE pronomes masculinos (o candidato é homem)
     4. ESTRUTURA MARKDOWN OBRIGATÓRIA:
@@ -249,6 +251,7 @@ agente_redator = Agent(
     5. Cada `- ` em nova linha. NUNCA múltiplos bullets na mesma linha.
     6. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque nas habilidades.
     7. SIGA a ESTRATÉGIA DO ANALISTA da ANÁLISE_ESTRATÉGICA
+    8. RETORNO ESTRITO: Retorne APENAS o código Markdown do currículo. NÃO adicione ABSOLUTAMENTE NENHUMA conversa, saudação, explicação ou comentário antes ou depois do currículo (ex: "Aqui está o currículo...", "como exemplo", etc.).
     
     === BLACKLIST DE FRASES — SE VOCÊ USAR QUALQUER UMA, O CV SERÁ REJEITADO ===
     
@@ -386,7 +389,7 @@ def pipeline_cv(termos_ats: list) -> str:
         # ═══════════════════════════════════════════════════════════
         print("\n[2/5] Reescrevendo CV para ATS...")
 
-        MAX_RETRIES = 10
+        MAX_RETRIES = 5
         melhor_score = 0
         melhor_cv = ""
         resultado_redacao = ""

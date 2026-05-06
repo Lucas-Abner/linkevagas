@@ -30,4 +30,5 @@ dependencies = [
     "torch>=2.10.0",
     "weasyprint>=68.1",
     "pyinstaller>=6.20.0",
+    "youtube-transcript-api>=1.0.3",
 ]

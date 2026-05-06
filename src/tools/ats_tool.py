@@ -185,10 +185,10 @@ def tool_avaliar_score_ats(cv_text: str, keywords: list, attempt: int = 0) -> tu
 
     if score_porcentagem < 50:
         print(f"DEBUG: Score BAIXO - Faltam: {faltantes}")
-        feedback += f"AVALIAÇÃO REPROVADA. O currículo ignorou muitas ferramentas vitais. \nTermos OBRIGATÓRIOS que ESQUECEU de incluir: {', '.join(faltantes)}. \nRefaça o currículo inserindo estas palavras nas experiências."
+        feedback += f"AVALIAÇÃO REPROVADA. O currículo ignorou muitas ferramentas vitais. \nTermos OBRIGATÓRIOS que ESQUECEU de incluir: {', '.join(faltantes)}. \nTente incorporar essas palavras nas atividades das experiências JÁ EXISTENTES. ATENÇÃO: NUNCA invente novos cargos ou empresas para forçar a inclusão dessas palavras."
     elif score_porcentagem < 75:
         print(f"DEBUG: Score MEDIANO - Faltam: {faltantes}")
-        feedback += f"AVALIAÇÃO MEDIANA. Quase lá. \nAinda faltam as seguintes palavras-chave: {', '.join(faltantes)}. \nIncorpore-as de forma natural no texto."
+        feedback += f"AVALIAÇÃO MEDIANA. Quase lá. \nAinda faltam as seguintes palavras-chave: {', '.join(faltantes)}. \nIncorpore-as de forma natural no texto APENAS nas experiências JÁ EXISTENTES. NÃO crie experiências novas."
     else:
         print(f"DEBUG: Score ALTO ({score_porcentagem}%) - O CV está excelente!")
         feedback += "AVALIAÇÃO APROVADA. Excelente aderência."

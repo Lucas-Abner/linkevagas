@@ -1685,6 +1685,7 @@ dependencies = [
     { name = "spacy" },
     { name = "torch" },
     { name = "weasyprint" },
+    { name = "youtube-transcript-api" },
 ]
 
 [package.metadata]
@@ -1713,6 +1714,7 @@ requires-dist = [
     { name = "spacy", specifier = ">=3.8.11" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "weasyprint", specifier = ">=68.1" },
+    { name = "youtube-transcript-api", specifier = ">=1.0.3" },
 ]
 
 [[package]]
