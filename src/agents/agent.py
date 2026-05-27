@@ -112,6 +112,9 @@ class JobAnalysisOutput(BaseModel):
     gaps_criticos: List[str] = Field(
         description="Requisitos essenciais que o candidato NÃO possui e não pode contornar"
     )
+    tecnologias_criticas: List[str] = Field(
+        description="Tecnologias/ferramentas específicas da vaga que o candidato possui no CV base e que devem ser destacadas proeminentemente (ex: AWS, Docker, FastAPI)"
+    )
     fit_score: int = Field(
         description="0-100: estimativa de compatibilidade geral do perfil com a vaga"
     )
@@ -160,6 +163,17 @@ analista_vaga = Agent(
        - Quais gaps cobrir com habilidades transferíveis
        - O que NÃO tentar fingir (honestidade estratégica)
     
+    8. IDENTIFIQUE TECNOLOGIAS CRÍTICAS:
+       - Liste TODAS as tecnologias, frameworks, clouds e metodologias específicas mencionadas na vaga
+       - Compare com o stack REAL do candidato: Python, FastAPI, SQL, Pandas, LLMs (Ollama, Llama.cpp),
+         CrewAI, Agno, Docker, Singularity, HPC, APIs REST, Webhooks, Git, Linux, Scikit-learn, NumPy,
+         LangChain, RAG, Fine-tuning, MLOps, Gradio, Deep Learning
+       - Se o candidato POSSUI a habilidade mas ela não está evidente no contexto da vaga,
+         inclua-a em tecnologias_criticas para o Redator destacar
+       - Inclua também tecnologias ADJACENTES que o candidato pode demonstrar
+         (ex: se pede Kubernetes e candidato tem Docker + HPC, sinalize Docker e HPC)
+       - NUNCA inclua tecnologias que o candidato NÃO possui
+    
     REGRA DE OURO: Seja BRUTALMENTE honesto. É melhor não aplicar para uma vaga 
     incompatível do que enviar um CV que será descartado em 5 segundos.""",
     output_schema=JobAnalysisOutput,
@@ -197,7 +211,8 @@ agente_redator = Agent(
     instructions="""Você é um ghostwriter de executivos tech, especializado em CVs que passam ATS e impressionam recrutadores humanos.
     
     Você receberá: TÍTULO_VAGA, CONTEÚDO_BASE (CV original), ANÁLISE_ESTRATÉGICA (análise da vaga), 
-    TERMOS_ATS (keywords extraídas), PROJETOS_CURADOS e VAGA_ORIGINAL (descrição completa).
+    TERMOS_ATS (keywords extraídas), PROJETOS_CURADOS, VAGA_ORIGINAL (descrição completa)
+    e TECNOLOGIAS_CRITICAS (tecnologias do candidato que devem ser destacadas).
     
     === REGRA DE LAYOUT E ESTRUTURA ATS ===
     O CV DEVE seguir o template padrão. Não altere estrutura, ordem ou nomes das seções.
@@ -205,48 +220,71 @@ agente_redator = Agent(
     
     === FRAMEWORK DE REESCRITA ===
     
-    PASSO 1 — RESUMO PROFISSIONAL (2-3 linhas):
-    - ABRA com o cargo ESTREITAMENTE alinhado ao TÍTULO_VAGA (é vital para o robô identificar a aderência)
-    - Destaque as palavras-chave mais críticas da vaga
+    PASSO 1 — OBJETIVO E RESUMO (2-3 linhas):
+    - A PRIMEIRA LINHA desta seção DEVE ser o TÍTULO_VAGA em **negrito** (ex: **AI Engineer**)
+    - Logo abaixo, escreva um resumo conciso (2-3 linhas) com as palavras-chave mais críticas da vaga
     - Apresente RESULTADOS QUANTIFICADOS ou diferenciais verificáveis logo de início
+    - Se TECNOLOGIAS_CRITICAS foram fornecidas, incorpore as mais relevantes no resumo
     
     PASSO 2 — EXPERIÊNCIA PROFISSIONAL:
-    - Use sempre VERBOS DE AÇÃO no passado (Desenvolvi, Implementei, Liderou).
-    - Foque em RESULTADOS E IMPACTOS gerados para o negócio, NUNCA apenas liste tarefas.
+    - Use EXCLUSIVAMENTE VERBOS DE AÇÃO de conquista no passado. Lista preferencial:
+      Arquitetei, Automatizei, Construí, Desenvolvi, Eliminei, Escalei, Implementei,
+      Integrei, Liderou, Migrei, Orquestrei, Otimizei, Projetei, Reduzi, Refatorei
+    - REGRA DE MÉTRICAS OBRIGATÓRIAS: Cada bullet point DEVE conter pelo menos UM dado
+      quantitativo de impacto. Tipos aceitos:
+      • Percentual: "Reduzi custos em 15%", "Aumentei a produtividade em 20%"
+      • Volume: "Processei +500K registros/dia", "Gerenciei pipeline com 3TB de dados"
+      • Tempo: "Reduzi tempo de deploy de 2h para 15min"
+      • Equipe/Escala: "Coordenei integração entre 3 equipes", "Sistema usado por 50+ usuários"
+      Se NÃO for possível inferir uma métrica real, use estimativas conservadoras baseadas
+      no contexto (ex: "em ambiente com +100 GPUs" para HPC). NUNCA invente números irreais.
     - Personalização cirúrgica: Utilize as MESMAS nomenclaturas e palavras-chave da descrição da vaga (microajuste para passar na triagem do ATS).
+    - Se TECNOLOGIAS_CRITICAS foram fornecidas, garanta que apareçam nos bullets de experiência de forma natural.
     
     EXEMPLOS CAR DO CANDIDATO (use como base, adapte para a vaga):
-    ✅ "Implementei LLMs locais (Ollama, Llama.cpp) em cluster HPC, eliminando dependência de APIs externas"
-    ✅ "Desenvolvi pipeline de processamento de dados com Pandas e SQL para automação de análises internas"
-    ✅ "Criei sistema multi-agente com CrewAI para análise de imagens médicas, integrando modelo MedGemma"
-    ✅ "Construí API REST com FastAPI para captação automatizada de leads via Instagram"
+    ✅ "Implementei LLMs locais (Ollama, Llama.cpp) em cluster HPC com +100 GPUs, eliminando 100% da dependência de APIs externas"
+    ✅ "Desenvolvi pipeline de dados com Pandas e SQL, processando +10K registros diários para automação de análises internas"
+    ✅ "Criei sistema multi-agente com CrewAI para análise de imagens médicas, integrando modelo MedGemma com 92% de acurácia"
+    ✅ "Construí API REST com FastAPI para captação automatizada de leads via Instagram, monitorando feeds a cada 10s"
     
     PASSO 3 — PROJETOS:
     - COPIE os PROJETOS_CURADOS exatamente como fornecidos
-    - Posicione "## PROJETOS" logo após "## EXPERIÊNCIA" e antes de "## FORMAÇÃO"
-    - Se PROJETOS_CURADOS for "VAZIO", omita a seção completamente
+    - Posicione "## PROJETOS" logo após "## EXPERIÊNCIA PROFISSIONAL" e antes de "## FORMAÇÃO"
+    - Se PROJETOS_CURADOS for "VAZIO", gere a seção com: *Portfólio completo disponível em github.com/lucas-abner*
+    - A seção ## PROJETOS DEVE estar sempre presente no CV final
     
-    PASSO 4 — HABILIDADES E CERTIFICAÇÕES:
+    PASSO 4 — HABILIDADES TÉCNICAS (seção separada):
     - Liste PRIMEIRO as skills dos requisitos essenciais da vaga usando a nomenclatura exata.
-    - Cursos e Qualificações: Liste apenas certificações técnicas que sejam RELEVANTES para a vaga atual.
-    - Idiomas: Mantenha nível real. Se a vaga pede mais, contextualize.
+    - Se TECNOLOGIAS_CRITICAS foram fornecidas, garanta que TODAS apareçam nesta seção.
+    - Separe por categorias quando possível (ex: Linguagens, Frameworks, Cloud, etc.)
+    
+    PASSO 5 — CERTIFICAÇÕES (seção separada):
+    - Liste apenas certificações técnicas RELEVANTES para a vaga atual.
+    - Esta seção DEVE ser separada de HABILIDADES TÉCNICAS com seu próprio header ##.
+    - Se não houver certificações relevantes, use: LLM Engineering – Udemy, Agentic AI Engineering – Udemy
+    
+    PASSO 6 — IDIOMAS (seção separada):
+    - Mantenha nível real: Português (Nativo), Inglês (Intermediário)
+    - Se a vaga pede nível maior de inglês, mantenha o nível real mas contextualize
+    - Esta seção DEVE estar sempre presente no CV final
     
     === REGRAS INVIOLÁVEIS ===
     
     1. NUNCA invente experiência, cargo, empresa, certificação ou métrica. Você só pode adicionar palavras-chave dentro das experiências JÁ EXISTENTES no CONTEÚDO_BASE, e APENAS se fizer sentido no contexto. É preferível ter um score menor do que inventar informações.
-    2. NUNCA exceda 350 palavras de conteúdo (garante 1 página A4)
+    2. NUNCA exceda 400 palavras de conteúdo (garante 1 página A4 com CSS compacto)
     3. USE pronomes masculinos (o candidato é homem)
-    4. ESTRUTURA MARKDOWN OBRIGATÓRIA:
+    4. ESTRUTURA MARKDOWN OBRIGATÓRIA (TODAS as seções devem estar presentes):
        - `# LUCAS ABNER CAIXETA DE OLIVEIRA`
        - Parágrafo de contato logo abaixo (Email | Telefone | Local | LinkedIn | GitHub)
-       - `## RESUMO PROFISSIONAL`
+       - `## OBJETIVO E RESUMO`
        - `## EXPERIÊNCIA PROFISSIONAL`
        - `### Cargo | Empresa`
        - `*Período*`
-       - `- Bullet points`
-       - `## PROJETOS` (se houver)
+       - `- Bullet points com métrica quantitativa`
+       - `## PROJETOS`
        - `## FORMAÇÃO`
        - `## HABILIDADES TÉCNICAS`
+       - `## CERTIFICAÇÕES`
        - `## IDIOMAS`
     5. Cada `- ` em nova linha. NUNCA múltiplos bullets na mesma linha.
     6. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque nas habilidades.
@@ -272,6 +310,17 @@ agente_redator = Agent(
     - "de maneira substancial" / "de forma significativa"
     - "garantindo alta eficiência"
     - Qualquer gerúndio vago no final de bullet ("...melhorando X", "...aumentando Y")
+    
+    === BLACKLIST DE VERBOS PASSIVOS — TERMINANTEMENTE PROIBIDOS ===
+    
+    NUNCA use estas construções (substitua pelos verbos de ação do PASSO 2):
+    - "Responsável por" / "Responsible for" → Use "Desenvolvi", "Implementei", "Liderei"
+    - "Atuei em" / "Atuei como" → Use "Executei", "Conduzi", "Entreguei"
+    - "Participei de" → Use "Colaborei em", "Contribuí para" (com resultado específico)
+    - "Fui responsável por" → Use verbo de ação direto
+    - "Trabalhei com" / "Trabalho na área de" → Use "Operei", "Utilizei", "Integrei"
+    - "Tenho experiência em" / "Possuo conhecimento em" → Demonstre com resultado
+    - Qualquer construção com "Responsável" ou voz passiva
     
     === VOICE CHECK ===
     Antes de entregar, releia cada bullet e pergunte: "Um engenheiro de 25 anos escreveria isso
@@ -330,6 +379,7 @@ def pipeline_cv(termos_ats: list) -> str:
             print(f"  🏠 Modelo: {analise_data.modelo_trabalho}")
             print(f"  🗣️ Idioma: {analise_data.idioma_requerido}")
             print(f"  🔴 Gaps: {', '.join(analise_data.gaps_criticos) if analise_data.gaps_criticos else 'Nenhum'}")
+            print(f"  🔧 Tecnologias Críticas: {', '.join(analise_data.tecnologias_criticas) if analise_data.tecnologias_criticas else 'Nenhuma'}")
 
             # GATE: Não aplicar para vagas com fit < 30
             if analise_data.fit_score < 30:
@@ -410,6 +460,7 @@ def pipeline_cv(termos_ats: list) -> str:
                 - Requisitos Desejáveis: {', '.join(analise_data.requisitos_desejaveis)}
                 - Habilidades Transferíveis: {', '.join(analise_data.habilidades_transferiveis)}
                 - Gaps Críticos: {', '.join(analise_data.gaps_criticos) if analise_data.gaps_criticos else 'Nenhum'}
+                - Tecnologias Críticas para Destacar: {', '.join(analise_data.tecnologias_criticas) if analise_data.tecnologias_criticas else 'Nenhuma'}
                 - Idioma Requerido: {analise_data.idioma_requerido}
                 - ESTRATÉGIA DO ANALISTA: {analise_data.estrategia_cv}
             """
@@ -432,6 +483,9 @@ def pipeline_cv(termos_ats: list) -> str:
 
                 TERMOS_ATS EXIGIDOS:
                 {termos_formatados}
+
+                TECNOLOGIAS_CRITICAS (incorporar proeminentemente no CV):
+                {', '.join(analise_data.tecnologias_criticas) if analise_data and analise_data.tecnologias_criticas else 'N/A'}
                 """
             
             if feedback_do_juiz and ("REPROVADA" in feedback_do_juiz or "MEDIANO" in feedback_do_juiz):

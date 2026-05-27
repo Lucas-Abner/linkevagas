@@ -297,8 +297,9 @@ CONTEXTO DO CANDIDATO:
 - Experiência: IA, Python, Machine Learning, LLMs, Fast API, Agentes IA
 - Disponibilidade: Imediata
 - Gênero: Masculino
-- Salário pretendido: 5000
+- Salário pretendido: 4000
 - CPF: 45829395894
+- Location: Campinas
 
 PROCESSO DE RESPOSTA:
 1. Leia a pergunta cuidadosamente
