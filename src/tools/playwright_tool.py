@@ -8,6 +8,19 @@ from dotenv import load_dotenv
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
 
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    """Lê uma variável booleana do .env com suporte a valores comuns."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on", "sim"}
+
+
+def _launch_browser(playwright):
+    """Abre o Chromium respeitando a flag do .env."""
+    return playwright.chromium.launch(headless=_env_bool("PLAYWRIGHT_HEADLESS", False))
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # FUNÇÃO 1: Validar e Gerenciar Sessão
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -45,7 +58,7 @@ def _create_session(p=None):
         with sync_playwright() as playwright:
             return _create_session(playwright)
             
-    browser = p.chromium.launch(headless=False)
+    browser = _launch_browser(p)
     context = browser.new_context()
     page = context.new_page()
 
@@ -113,7 +126,7 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
     quantity = int(quantity) if isinstance(quantity, str) and quantity.isdigit() else 5
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = _launch_browser(p)
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 
@@ -161,7 +174,7 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
             _create_session(p)
             
             # Reabre a página de busca com a nova sessão
-            browser = p.chromium.launch(headless=False)
+            browser = _launch_browser(p)
             context = browser.new_context(storage_state="linkedin_session.json")
             page = context.new_page()
             page.goto(search_url)
@@ -545,7 +558,7 @@ def apply_to_job(job_url: str, cv_filename: str) -> str:
         _create_session()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = _launch_browser(p)
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 
@@ -571,7 +584,7 @@ def apply_to_job(job_url: str, cv_filename: str) -> str:
                 os.remove("linkedin_session.json")
             
             _create_session(p)
-            browser = p.chromium.launch(headless=False)
+            browser = _launch_browser(p)
             context = browser.new_context(storage_state="linkedin_session.json")
             page = context.new_page()
             page.goto(job_url)
