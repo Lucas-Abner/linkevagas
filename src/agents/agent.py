@@ -16,7 +16,7 @@ load_dotenv()
 from src.tools.playwright_tool import buscar_multiplas_vagas, tool_envio_candidatura
 # Importando o novo arsenal de ferramentas
 from src.tools.cv_tool import ler_cv_base_md, salvar_cv_otimizado_md, converter_md_para_pdf
-from src.tools.ats_tool import extract_entities, extrator_keywords_keybert, pre_process_pipeline, avaliar_score_combinado
+from src.tools.ats_tool import extract_entities, extrator_keywords_keybert, pre_process_pipeline, avaliar_score_combinado, validar_formato_ats
 from src.tools.tracking import registrar_candidatura, gerar_relatorio
 from src.tools.github_tool import extrair_repositorios_github
 
@@ -214,82 +214,114 @@ agente_redator = Agent(
     TERMOS_ATS (keywords extraídas), PROJETOS_CURADOS, VAGA_ORIGINAL (descrição completa)
     e TECNOLOGIAS_CRITICAS (tecnologias do candidato que devem ser destacadas).
     
-    === REGRA DE LAYOUT E ESTRUTURA ATS ===
-    O CV DEVE seguir o template padrão. Não altere estrutura, ordem ou nomes das seções.
-    Mantenha um formato "clean" e texto puro: evite colunas, ícones, tabelas ou quebras de layout complexas que confundem os robôs ATS. O formato deve ser simples, direto ao ponto e otimizado para extração de texto.
+    === REGRAS FUNDAMENTAIS DE FORMATO ATS ===
+    O formato DEVE ser otimizado para leitura por ferramentas ATS (Applicant Tracking Systems).
+    ATS são BURRAS: não interpretam imagens, gráficos, emojis, colunas ou bullet points.
     
-    === FRAMEWORK DE REESCRITA ===
+    REGRAS DE FORMATO OBRIGATÓRIAS:
+    1. TEXTO CORRIDO — NUNCA use bullet points (- , * , • ). Escreva parágrafos curtos
+       separados por quebra de linha. ATS podem não compreender listas com marcadores.
+    2. SEM EMOJIS/ÍCONES — NUNCA use emojis, ícones unicode ou qualquer símbolo gráfico.
+    3. SEM COLUNAS — O CV deve ser escrito de forma corrida, texto linear.
+    4. SEM IMAGENS — Nenhuma referência a elementos visuais.
+    5. PROFICIÊNCIA EM PALAVRAS — Ao pontuar idiomas ou ferramentas, use PALAVRAS
+       ("avançado", "fluente", "intermediário"), NUNCA gráficos, barras ou percentuais.
     
-    PASSO 1 — OBJETIVO E RESUMO (2-3 linhas):
-    - A PRIMEIRA LINHA desta seção DEVE ser o TÍTULO_VAGA em **negrito** (ex: **AI Engineer**)
-    - Logo abaixo, escreva um resumo conciso (2-3 linhas) com as palavras-chave mais críticas da vaga
-    - Apresente RESULTADOS QUANTIFICADOS ou diferenciais verificáveis logo de início
-    - Se TECNOLOGIAS_CRITICAS foram fornecidas, incorpore as mais relevantes no resumo
+    === ESTRUTURA OBRIGATÓRIA DO CV (nesta ordem exata) ===
     
-    PASSO 2 — EXPERIÊNCIA PROFISSIONAL:
-    - Use EXCLUSIVAMENTE VERBOS DE AÇÃO de conquista no passado. Lista preferencial:
+    PASSO 0 — CABEÇALHO:
+    - `# LUCAS ABNER CAIXETA DE OLIVEIRA`
+    - Linha de título: `Cargo | Keyword1 | Keyword2 | Keyword3`
+      O título deve conter o cargo alvo e palavras-chave estratégicas para a ATS
+      encontrar o CV no banco de talentos. Ex: `AI Engineer | Python | LLMs | FastAPI`
+    - Linha de contato: `Campinas, SP | (11) 96013-6292 (WhatsApp) | lucascaixeta02@gmail.com | linkedin.com/in/lucas-abner-caixeta-oliveira | github.com/lucas-abner`
+    
+    PASSO 1 — OBJETIVO (`## OBJETIVO`):
+    - Objetivo é SEMPRE profissional e assertivo. Coloque o CARGO e ÁREA que quer.
+    - NUNCA escreva textos genéricos como "busco oportunidade de trabalho para
+      colaborar com a empresa" — isso será REJEITADO pelo validador ATS.
+    - CORRETO: "Busco oportunidade como Analista de Dados Sênior ou Engenheiro de
+      Dados Pleno, atuando com pipelines de dados e Machine Learning."
+    - Pode discorrer brevemente, mas SEMPRE pontue o(s) cargo(s) de interesse.
+    
+    PASSO 2 — HIGHLIGHTS (`## HIGHLIGHTS`):
+    - Cases de sucesso e experiências relevantes para a posição.
+    - Edite para cada vaga. Selecione 2-3 conquistas quantificadas.
+    - DEVE conter MÉTRICAS reais (percentual, volume, tempo, equipe).
+    - Se TECNOLOGIAS_CRITICAS foram fornecidas, destaque-as nos highlights.
+    - Escreva como parágrafos curtos, NÃO como lista com marcadores.
+    - Exemplo: "No estágio atual no CNPEM, implementei LLMs locais em cluster HPC
+      com mais de 100 GPUs, eliminando 100% da dependência de APIs externas."
+    
+    PASSO 3 — EXPERIÊNCIA (`## EXPERIÊNCIA`):
+    - Formato: Nome da Empresa, Cargo, Senioridade, Período
+    - Descreva funções, progressão e ferramentas utilizadas em TEXTO CORRIDO.
+    - NUNCA use bullet points. Separe ideias por quebra de linha simples.
+    - Use EXCLUSIVAMENTE VERBOS DE AÇÃO no passado:
       Arquitetei, Automatizei, Construí, Desenvolvi, Eliminei, Escalei, Implementei,
-      Integrei, Liderou, Migrei, Orquestrei, Otimizei, Projetei, Reduzi, Refatorei
-    - REGRA DE MÉTRICAS OBRIGATÓRIAS: Cada bullet point DEVE conter pelo menos UM dado
-      quantitativo de impacto. Tipos aceitos:
-      • Percentual: "Reduzi custos em 15%", "Aumentei a produtividade em 20%"
-      • Volume: "Processei +500K registros/dia", "Gerenciei pipeline com 3TB de dados"
-      • Tempo: "Reduzi tempo de deploy de 2h para 15min"
-      • Equipe/Escala: "Coordenei integração entre 3 equipes", "Sistema usado por 50+ usuários"
-      Se NÃO for possível inferir uma métrica real, use estimativas conservadoras baseadas
-      no contexto (ex: "em ambiente com +100 GPUs" para HPC). NUNCA invente números irreais.
-    - Personalização cirúrgica: Utilize as MESMAS nomenclaturas e palavras-chave da descrição da vaga (microajuste para passar na triagem do ATS).
-    - Se TECNOLOGIAS_CRITICAS foram fornecidas, garanta que apareçam nos bullets de experiência de forma natural.
+      Integrei, Liderei, Migrei, Orquestrei, Otimizei, Projetei, Reduzi, Refatorei
+    - REGRA DE MÉTRICAS: Cada parágrafo DEVE conter pelo menos UM dado quantitativo.
+      Se NÃO for possível inferir uma métrica real, use estimativas conservadoras.
+    - Personalização cirúrgica: use as MESMAS nomenclaturas da descrição da vaga.
+    - Não traga informações deduzíveis. Traga pontos relevantes sobre atuação real.
     
     EXEMPLOS CAR DO CANDIDATO (use como base, adapte para a vaga):
-    ✅ "Implementei LLMs locais (Ollama, Llama.cpp) em cluster HPC com +100 GPUs, eliminando 100% da dependência de APIs externas"
-    ✅ "Desenvolvi pipeline de dados com Pandas e SQL, processando +10K registros diários para automação de análises internas"
-    ✅ "Criei sistema multi-agente com CrewAI para análise de imagens médicas, integrando modelo MedGemma com 92% de acurácia"
-    ✅ "Construí API REST com FastAPI para captação automatizada de leads via Instagram, monitorando feeds a cada 10s"
+    "Implementei LLMs locais (Ollama, Llama.cpp) em cluster HPC com mais de 100 GPUs, eliminando 100% da dependência de APIs externas."
+    "Desenvolvi pipeline de dados com Pandas e SQL, processando mais de 10 mil registros diários para automação de análises internas."
+    "Criei sistema multi-agente com CrewAI para análise de imagens médicas, integrando modelo MedGemma com 92% de acurácia."
+    "Construí API REST com FastAPI para captação automatizada de leads via Instagram, monitorando feeds a cada 10 segundos."
     
-    PASSO 3 — PROJETOS:
-    - COPIE os PROJETOS_CURADOS exatamente como fornecidos
-    - Posicione "## PROJETOS" logo após "## EXPERIÊNCIA PROFISSIONAL" e antes de "## FORMAÇÃO"
-    - Se PROJETOS_CURADOS for "VAZIO", gere a seção com: *Portfólio completo disponível em github.com/lucas-abner*
-    - A seção ## PROJETOS DEVE estar sempre presente no CV final
+    PASSO 4 — PROJETOS (OPCIONAL):
+    - Se PROJETOS_CURADOS foram fornecidos e NÃO são "VAZIO", inclua `## PROJETOS`
+      logo após EXPERIÊNCIA, mas adapte para texto corrido (sem bullets).
+    - Se PROJETOS_CURADOS for "VAZIO", inclua apenas: Portfólio completo disponível em github.com/lucas-abner
     
-    PASSO 4 — HABILIDADES TÉCNICAS (seção separada):
-    - Liste PRIMEIRO as skills dos requisitos essenciais da vaga usando a nomenclatura exata.
-    - Se TECNOLOGIAS_CRITICAS foram fornecidas, garanta que TODAS apareçam nesta seção.
-    - Separe por categorias quando possível (ex: Linguagens, Frameworks, Cloud, etc.)
+    PASSO 5 — FORMAÇÃO (`## FORMAÇÃO`):
+    - Informe formação e traga informações RELEVANTES sobre ela.
+    - Inclua eventos, projetos, prêmios, iniciações científicas.
+    - Inclua certificações técnicas relevantes para a vaga DENTRO desta seção.
+    - Formato: Nome do Curso — Instituição, Ano
+      Principais conceitos aprendidos (relevantes para a vaga)
     
-    PASSO 5 — CERTIFICAÇÕES (seção separada):
-    - Liste apenas certificações técnicas RELEVANTES para a vaga atual.
-    - Esta seção DEVE ser separada de HABILIDADES TÉCNICAS com seu próprio header ##.
-    - Se não houver certificações relevantes, use: LLM Engineering – Udemy, Agentic AI Engineering – Udemy
+    PASSO 6 — IDIOMAS (`## IDIOMAS`):
+    - NUNCA use gráficos, barras ou pontos. Só PALAVRAS por extenso.
+    - Use termos como: básico, intermediário, avançado, fluente.
+    - Pode usar B1, B2, C1, C2. Preferível a palavra por extenso.
+    - Mantenha nível real: Português nativo, Inglês intermediário
+    - Exemplo: "Português nativo, Inglês intermediário"
     
-    PASSO 6 — IDIOMAS (seção separada):
-    - Mantenha nível real: Português (Nativo), Inglês (Intermediário)
-    - Se a vaga pede nível maior de inglês, mantenha o nível real mas contextualize
-    - Esta seção DEVE estar sempre presente no CV final
+    PASSO 7 — SKILLSET (`## SKILLSET`):
+    - TODAS as ferramentas, linguagens, bibliotecas, frameworks, bancos, etc.
+    - NÃO precisa discorrer, só colocar os nomes em lista corrida.
+    - Liste PRIMEIRO as skills dos requisitos essenciais da vaga.
+    - Se TECNOLOGIAS_CRITICAS foram fornecidas, garanta que TODAS apareçam.
+    - Exemplo: "Python, SQL, FastAPI, Docker, LangChain, RAG, CrewAI, Pandas"
+    - SEM categorias, SEM subcabeçalhos. Lista simples separada por vírgulas.
     
     === REGRAS INVIOLÁVEIS ===
     
-    1. NUNCA invente experiência, cargo, empresa, certificação ou métrica. Você só pode adicionar palavras-chave dentro das experiências JÁ EXISTENTES no CONTEÚDO_BASE, e APENAS se fizer sentido no contexto. É preferível ter um score menor do que inventar informações.
+    1. NUNCA invente experiência, cargo, empresa, certificação ou métrica. Você só pode
+       adicionar palavras-chave dentro das experiências JÁ EXISTENTES no CONTEÚDO_BASE,
+       e APENAS se fizer sentido no contexto. É preferível ter um score menor do que
+       inventar informações.
     2. NUNCA exceda 400 palavras de conteúdo (garante 1 página A4 com CSS compacto)
     3. USE pronomes masculinos (o candidato é homem)
-    4. ESTRUTURA MARKDOWN OBRIGATÓRIA (TODAS as seções devem estar presentes):
+    4. ESTRUTURA MARKDOWN OBRIGATÓRIA (TODAS as seções, nesta ordem):
        - `# LUCAS ABNER CAIXETA DE OLIVEIRA`
-       - Parágrafo de contato logo abaixo (Email | Telefone | Local | LinkedIn | GitHub)
-       - `## OBJETIVO E RESUMO`
-       - `## EXPERIÊNCIA PROFISSIONAL`
-       - `### Cargo | Empresa`
-       - `*Período*`
-       - `- Bullet points com métrica quantitativa`
-       - `## PROJETOS`
+       - Linha de título com cargo + keywords
+       - Linha de contato
+       - `## OBJETIVO`
+       - `## HIGHLIGHTS`
+       - `## EXPERIÊNCIA`
        - `## FORMAÇÃO`
-       - `## HABILIDADES TÉCNICAS`
-       - `## CERTIFICAÇÕES`
        - `## IDIOMAS`
-    5. Cada `- ` em nova linha. NUNCA múltiplos bullets na mesma linha.
+       - `## SKILLSET`
+    5. NUNCA use bullet points (- , * , • ). Texto corrido com quebras de linha.
     6. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque nas habilidades.
     7. SIGA a ESTRATÉGIA DO ANALISTA da ANÁLISE_ESTRATÉGICA
-    8. RETORNO ESTRITO: Retorne APENAS o código Markdown do currículo. NÃO adicione ABSOLUTAMENTE NENHUMA conversa, saudação, explicação ou comentário antes ou depois do currículo (ex: "Aqui está o currículo...", "como exemplo", etc.).
+    8. RETORNO ESTRITO: Retorne APENAS o código Markdown do currículo. NÃO adicione
+       ABSOLUTAMENTE NENHUMA conversa, saudação, explicação ou comentário antes ou
+       depois do currículo (ex: "Aqui está o currículo...", "como exemplo", etc.).
     
     === BLACKLIST DE FRASES — SE VOCÊ USAR QUALQUER UMA, O CV SERÁ REJEITADO ===
     
@@ -309,11 +341,11 @@ agente_redator = Agent(
     - "aprimorando a qualidade"
     - "de maneira substancial" / "de forma significativa"
     - "garantindo alta eficiência"
-    - Qualquer gerúndio vago no final de bullet ("...melhorando X", "...aumentando Y")
+    - Qualquer gerúndio vago no final de frase ("...melhorando X", "...aumentando Y")
     
     === BLACKLIST DE VERBOS PASSIVOS — TERMINANTEMENTE PROIBIDOS ===
     
-    NUNCA use estas construções (substitua pelos verbos de ação do PASSO 2):
+    NUNCA use estas construções (substitua pelos verbos de ação do PASSO 3):
     - "Responsável por" / "Responsible for" → Use "Desenvolvi", "Implementei", "Liderei"
     - "Atuei em" / "Atuei como" → Use "Executei", "Conduzi", "Entreguei"
     - "Participei de" → Use "Colaborei em", "Contribuí para" (com resultado específico)
@@ -323,7 +355,7 @@ agente_redator = Agent(
     - Qualquer construção com "Responsável" ou voz passiva
     
     === VOICE CHECK ===
-    Antes de entregar, releia cada bullet e pergunte: "Um engenheiro de 25 anos escreveria isso
+    Antes de entregar, releia cada frase e pergunte: "Um engenheiro de 25 anos escreveria isso
     no LinkedIn?" Se a resposta for não, reescreva com linguagem direta e técnica.
     """
 )
@@ -495,6 +527,17 @@ def pipeline_cv(termos_ats: list) -> str:
             resposta_redacao = agente_redator.run(prompt_redacao)
             texto_cv_gerado = resposta_redacao.content
 
+            # 1.5. Validação de formato ATS (gate antes do score de keywords)
+            erros_formato, avisos_formato = validar_formato_ats(texto_cv_gerado)
+            if erros_formato:
+                print(f"\n  ❌ FORMATO ATS — {len(erros_formato)} erro(s) detectado(s):")
+                for err in erros_formato:
+                    print(f"    - {err}")
+            if avisos_formato:
+                print(f"  ⚠️ FORMATO ATS — {len(avisos_formato)} aviso(s):")
+                for avs in avisos_formato:
+                    print(f"    - {avs}")
+
             # 2. Avaliação com score combinado (keyword 70% + semântico 30%)
             try:
                 feedback_ats, score_final = avaliar_score_combinado(
@@ -508,7 +551,15 @@ def pipeline_cv(termos_ats: list) -> str:
                 feedback_ats = "AVALIAÇÃO APROVADA (fallback)"
                 score_final = 75
 
-            print("\n📊 --- RESULTADO DO ALGORITMO ATS ---")
+            # Injeta erros de formato no feedback para o redator corrigir
+            if erros_formato:
+                formato_feedback = "\n\nERROS DE FORMATO ATS (CORRIGIR OBRIGATORIAMENTE):\n" + "\n".join(f"- {e}" for e in erros_formato)
+                feedback_ats += formato_feedback
+                # Se tem erros de formato, não pode ser aprovado
+                if "APROVADA" in feedback_ats and erros_formato:
+                    feedback_ats = feedback_ats.replace("APROVADA", "MEDIANO (erros de formato)")
+
+            print("\n--- RESULTADO DO ALGORITMO ATS ---")
             print(feedback_ats)
             print("------------------------------------\n")
 
@@ -518,12 +569,15 @@ def pipeline_cv(termos_ats: list) -> str:
                 melhor_cv = texto_cv_gerado
 
             # 3. Verifica o veredito
-            if "APROVADA" in feedback_ats:
-                print("✅ O currículo atingiu o Score exigido! A prosseguir...")
+            if "APROVADA" in feedback_ats and not erros_formato:
+                print("CV aprovado pelo validador ATS! A prosseguir...")
                 resultado_redacao = texto_cv_gerado
                 break
             else:
-                print(f"⚠️ Score {score_final:.1f}% — tentando melhorar...")
+                motivo = f"Score {score_final:.1f}%"
+                if erros_formato:
+                    motivo += f" + {len(erros_formato)} erro(s) de formato"
+                print(f"  {motivo} — tentando melhorar...")
                 feedback_do_juiz = feedback_ats
         else:
             # Esgotou tentativas — usa a melhor versão

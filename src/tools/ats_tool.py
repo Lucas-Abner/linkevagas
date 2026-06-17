@@ -659,3 +659,196 @@ def pre_process_pipeline(terms):
             cleaned.append(valid_term)
 
     return list(set(cleaned))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VALIDAÇÃO DE FORMATO ATS
+# Baseado nas regras do documento de referência (Novo_CV_ATS.docx.pdf)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Regex para detectar emojis e símbolos unicode gráficos
+_EMOJI_PATTERN = re.compile(
+    "["
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F300-\U0001F5FF"  # symbols & pictographs
+    "\U0001F680-\U0001F6FF"  # transport & map
+    "\U0001F1E0-\U0001F1FF"  # flags
+    "\U00002702-\U000027B0"  # dingbats
+    "\U0000FE00-\U0000FE0F"  # variation selectors
+    "\U0001F900-\U0001F9FF"  # supplemental symbols
+    "\U0001FA00-\U0001FA6F"  # chess symbols
+    "\U0001FA70-\U0001FAFF"  # symbols extended-A
+    "\U00002600-\U000026FF"  # misc symbols
+    "\U0000200D"             # zero width joiner
+    "\U00002B50"             # star
+    "\U0000231A-\U0000231B"  # watch/hourglass
+    "\U000023E9-\U000023F3"  # media controls
+    "\U000025AA-\U000025AB"  # squares
+    "\U000025FB-\U000025FE"  # squares
+    "✅❌⚠️🔍📊🎯💼🏠🗣️🔴🔧📄📖📋📝✂️ℹ️"
+    "]+", flags=re.UNICODE
+)
+
+# Seções obrigatórias conforme o documento de referência ATS
+_SECOES_OBRIGATORIAS_ATS = [
+    "OBJETIVO",
+    "HIGHLIGHTS",
+    "EXPERIÊNCIA",  # ou EXPERIENCIA
+    "FORMAÇÃO",     # ou FORMACAO
+    "IDIOMAS",
+    "SKILLSET",
+]
+
+# Padrões de objetivo genérico que o PDF proíbe explicitamente
+_OBJETIVO_GENERICO_PATTERNS = [
+    r"busco\s+oportunidade\s+de\s+trabalho\s+para\s+colaborar",
+    r"busco\s+oportunidade\s+para\s+contribuir",
+    r"profissional\s+em\s+busca\s+de",
+    r"busco\s+novos?\s+desafios?",
+    r"em\s+busca\s+de\s+oportunidade",
+    r"looking\s+for\s+an?\s+opportunity\s+to\s+contribute",
+    r"seeking\s+a\s+position\s+where\s+i\s+can",
+]
+
+
+def validar_formato_ats(cv_text: str) -> tuple[list, list]:
+    """
+    Valida se o CV gerado segue as regras de formato ATS do documento de referência.
+    Baseado no Novo_CV_ATS.docx.pdf.
+
+    Regras verificadas:
+    - Sem emojis, ícones ou símbolos gráficos unicode
+    - Sem bullet points (- , • , * ) — algumas ATS não compreendem
+    - Seções obrigatórias presentes (OBJETIVO, HIGHLIGHTS, EXPERIÊNCIA, FORMAÇÃO, IDIOMAS, SKILLSET)
+    - Objetivo assertivo (cargo específico), não genérico
+    - Idiomas descritos por extenso (palavras, não gráficos ou números)
+    - Limite de palavras (max 450 para caber em 1 página A4)
+
+    Args:
+        cv_text: Texto completo do CV gerado em Markdown.
+
+    Returns:
+        Tuple (erros: list[str], avisos: list[str])
+        - erros: violações graves que devem ser corrigidas
+        - avisos: recomendações que podem ser ignoradas
+    """
+    erros = []
+    avisos = []
+
+    if not cv_text or not cv_text.strip():
+        return ["CV vazio — nenhum conteúdo para validar."], []
+
+    cv_lower = cv_text.lower()
+
+    # ── 1. Verificar emojis/ícones unicode ──
+    emojis_encontrados = _EMOJI_PATTERN.findall(cv_text)
+    if emojis_encontrados:
+        emojis_unicos = set("".join(emojis_encontrados))
+        erros.append(
+            f"EMOJIS DETECTADOS: O CV contém {len(emojis_unicos)} emoji(s)/ícone(s) "
+            f"({', '.join(emojis_unicos)}). ATS não interpretam imagens ou emojis. "
+            f"Remova todos os emojis e substitua por texto puro."
+        )
+
+    # ── 2. Verificar bullet points ──
+    bullet_patterns = [
+        (r"^- ", "hífen (- )"),
+        (r"^• ", "bullet (• )"),
+        (r"^\* ", "asterisco (* )"),
+        (r"^► ", "seta (► )"),
+        (r"^→ ", "seta (→ )"),
+        (r"^▪ ", "quadrado (▪ )"),
+    ]
+    bullets_encontrados = []
+    for line in cv_text.split("\n"):
+        stripped = line.strip()
+        for pattern, nome in bullet_patterns:
+            if re.match(pattern, stripped):
+                bullets_encontrados.append(nome)
+                break
+
+    if bullets_encontrados:
+        contagem = len(bullets_encontrados)
+        tipos = set(bullets_encontrados)
+        erros.append(
+            f"BULLET POINTS DETECTADOS: {contagem} linha(s) com bullet points ({', '.join(tipos)}). "
+            f"Algumas ATS não compreendem bullet points. Reescreva como texto corrido "
+            f"separado por quebra de linha simples, sem marcadores."
+        )
+
+    # ── 3. Verificar seções obrigatórias ──
+    secoes_ausentes = []
+    for secao in _SECOES_OBRIGATORIAS_ATS:
+        # Aceita variações com/sem acento
+        variantes = [secao]
+        if secao == "EXPERIÊNCIA":
+            variantes.append("EXPERIENCIA")
+            variantes.append("EXPERIÊNCIA PROFISSIONAL")
+        elif secao == "FORMAÇÃO":
+            variantes.append("FORMACAO")
+            variantes.append("EDUCAÇÃO")
+            variantes.append("EDUCACAO")
+
+        encontrada = any(
+            re.search(r"##\s*" + re.escape(v), cv_text, re.IGNORECASE)
+            for v in variantes
+        )
+        if not encontrada:
+            secoes_ausentes.append(secao)
+
+    if secoes_ausentes:
+        erros.append(
+            f"SEÇÕES OBRIGATÓRIAS AUSENTES: {', '.join(secoes_ausentes)}. "
+            f"O CV deve conter todas as seções do template ATS: "
+            f"{', '.join(_SECOES_OBRIGATORIAS_ATS)}."
+        )
+
+    # ── 4. Verificar objetivo genérico ──
+    # Extrai o conteúdo entre ## OBJETIVO e a próxima seção ##
+    objetivo_match = re.search(
+        r"##\s*OBJETIVO\s*\n(.*?)(?=\n##|\Z)", cv_text, re.DOTALL | re.IGNORECASE
+    )
+    if objetivo_match:
+        objetivo_texto = objetivo_match.group(1).strip().lower()
+        for pattern in _OBJETIVO_GENERICO_PATTERNS:
+            if re.search(pattern, objetivo_texto):
+                erros.append(
+                    f"OBJETIVO GENÉRICO: O objetivo contém fraseado genérico. "
+                    f"Conforme regras ATS: 'Não escreva textos genéricos como busco "
+                    f"oportunidade de trabalho para colaborar'. Coloque o cargo e "
+                    f"área específica que deseja atuar. Ex: 'Busco oportunidade como "
+                    f"Analista de Dados Sênior ou Engenheiro de Dados Pleno'."
+                )
+                break
+
+    # ── 5. Verificar idiomas (devem usar palavras, não gráficos/números) ──
+    idiomas_match = re.search(
+        r"##\s*IDIOMAS\s*\n(.*?)(?=\n##|\Z)", cv_text, re.DOTALL | re.IGNORECASE
+    )
+    if idiomas_match:
+        idiomas_texto = idiomas_match.group(1).strip()
+        # Verifica se usa barras de progresso ou percentuais para idiomas
+        if re.search(r"[█▓░▄▀■□●○◐◑]", idiomas_texto):
+            erros.append(
+                "IDIOMAS COM GRÁFICOS: Utilize apenas palavras para descrever proficiência "
+                "(básico, intermediário, avançado, fluente) ou níveis CEFR (B1, B2, C1, C2). "
+                "Sem barras, gráficos ou símbolos."
+            )
+        if re.search(r"\d{2,3}\s*%", idiomas_texto):
+            avisos.append(
+                "IDIOMAS COM PERCENTUAL: Prefira palavras (básico, intermediário, avançado, "
+                "fluente) em vez de percentuais para descrever proficiência em idiomas."
+            )
+
+    # ── 6. Verificar limite de palavras ──
+    # Remove headers markdown para contagem justa
+    texto_limpo = re.sub(r"^#+\s+.*$", "", cv_text, flags=re.MULTILINE)
+    texto_limpo = re.sub(r"\*\*([^*]+)\*\*", r"\1", texto_limpo)
+    palavras = len(texto_limpo.split())
+    if palavras > 450:
+        avisos.append(
+            f"CV COM {palavras} PALAVRAS: O limite recomendado é 450 palavras para "
+            f"garantir que o CV caiba em 1 página A4. Considere reduzir o conteúdo."
+        )
+
+    return erros, avisos

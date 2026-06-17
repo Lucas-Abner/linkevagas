@@ -151,7 +151,7 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
         print(f"🔍 Buscando vagas: {search_term}")
         if local_busca:
             print(f"📍 Local: {local_busca}")
-        page.goto(search_url)
+        page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
 
         # ─────────────────────────────────────────────────────────────────
         # Verifica se o LinkedIn invalidou a sessão no servidor
@@ -177,7 +177,7 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
             browser = _launch_browser(p)
             context = browser.new_context(storage_state="linkedin_session.json")
             page = context.new_page()
-            page.goto(search_url)
+            page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(2000)
 
         # Detecta seletor de vagas
@@ -198,9 +198,28 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
                 continue
 
         if not active_selector:
+            # Verifica se é a página de "Nenhuma vaga encontrada"
+            no_results_indicators = [
+                "Nenhuma vaga corresponde aos seus critérios",
+                "Não há resultados para sua pesquisa",
+                "No matching jobs found",
+                "Limpar todos os filtros",
+                "Clear all filters"
+            ]
+            is_no_results = False
+            for indicator in no_results_indicators:
+                if page.locator(f"text='{indicator}'").count() > 0:
+                    is_no_results = True
+                    break
+            
             page.screenshot(path="debug_linkedin.png")
             browser.close()
-            raise Exception("Seletor de vagas não encontrado")
+            
+            if is_no_results:
+                print("⚠️ Nenhuma vaga encontrada para os termos/filtros aplicados.")
+                return []
+            else:
+                raise Exception("Seletor de vagas não encontrado (possível bloqueio, captcha ou erro de carregamento)")
 
         page.wait_for_timeout(1500)
         total_jobs = page.locator(active_selector).count()
@@ -562,7 +581,7 @@ def apply_to_job(job_url: str, cv_filename: str) -> str:
         context = browser.new_context(storage_state="linkedin_session.json")
         page = context.new_page()
 
-        page.goto(job_url)
+        page.goto(job_url, wait_until="domcontentloaded", timeout=60000)
         
         try:
             page.wait_for_load_state("domcontentloaded", timeout=8000)

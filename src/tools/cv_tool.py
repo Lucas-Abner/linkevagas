@@ -140,7 +140,28 @@ def converter_md_para_pdf(caminho_md: str) -> str:
                         padding: 0;
                     }}
 
-                    /* ── Títulos de seção (RESUMO, EXPERIÊNCIA) ── */
+                    /* ── Linha de título (Cargo | Keywords) ── */
+                    h1 + p {{
+                        text-align: center;
+                        font-family: 'Noto Sans', 'Segoe UI', Arial, sans-serif;
+                        font-size: 10pt;
+                        color: #374151;
+                        font-weight: 600;
+                        margin: 0 0 2px 0;
+                        line-height: 1.3;
+                    }}
+
+                    /* ── Linha de contato (segundo parágrafo após h1) ── */
+                    h1 + p + p {{
+                        text-align: center;
+                        font-family: 'Noto Sans Mono', 'Courier New', monospace;
+                        font-size: 8.5pt;
+                        color: #4b5563;
+                        margin-bottom: 8px;
+                        line-height: 1.4;
+                    }}
+
+                    /* ── Títulos de seção (OBJETIVO, HIGHLIGHTS, EXPERIÊNCIA, etc.) ── */
                     h2 {{
                         font-family: 'Liberation Serif', 'Times New Roman', serif;
                         font-size: 12pt;
@@ -163,27 +184,6 @@ def converter_md_para_pdf(caminho_md: str) -> str:
                         padding: 0;
                     }}
 
-                    /* ── Cargo/Subtítulo no topo (strong dentro do parágrafo de contato) ── */
-                    h1 + p strong {{
-                        display: block;
-                        font-family: 'Noto Sans Mono', 'Courier New', monospace;
-                        font-size: 9pt;
-                        color: #4b5563;
-                        font-weight: normal;
-                        margin-bottom: 3px;
-                        text-transform: uppercase;
-                    }}
-
-                    /* ── Contato ── */
-                    h1 + p {{
-                        text-align: center;
-                        font-family: 'Noto Sans Mono', 'Courier New', monospace;
-                        font-size: 8.5pt;
-                        color: #4b5563;
-                        margin-bottom: 8px;
-                        line-height: 1.4;
-                    }}
-
                     /* ── Datas e Períodos (em itálico no md) ── */
                     em {{
                         font-family: 'Noto Sans Mono', 'Courier New', monospace;
@@ -200,15 +200,17 @@ def converter_md_para_pdf(caminho_md: str) -> str:
                         color: #000000;
                     }}
 
-                    /* ── Parágrafos gerais ── */
+                    /* ── Parágrafos gerais (texto corrido ATS-friendly) ── */
                     p {{
-                        margin: 2px 0 3px 0;
+                        margin: 2px 0 4px 0;
+                        line-height: 1.4;
                     }}
 
-                    /* ── Listas (bullet points) ── */
+                    /* ── Listas (fallback caso bullet points escapem) ── */
                     ul {{
                         margin: 2px 0 5px 0;
                         padding-left: 16px;
+                        list-style-type: none;
                     }}
 
                     li {{
