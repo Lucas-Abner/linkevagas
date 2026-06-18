@@ -97,16 +97,93 @@ def salvar_cv_otimizado_md(conteudo_md: str, nome_vaga: str) -> str:
         f.write(conteudo_md)
     return nome_arquivo
 
+def _pre_processar_md_para_ats(texto_md: str) -> str:
+    """
+    Pré-processa o Markdown gerado pelo LLM para garantir boa renderização no PDF.
+    
+    Problemas resolvidos:
+    1. Títulos de empresa/projeto sem negrito → adiciona **negrito**
+    2. Linhas de contato sem separação visual → mantém como está
+    3. Normaliza quebras de linha para funcionar com nl2br
+    """
+    linhas = texto_md.split("\n")
+    resultado = []
+    secao_atual = ""
+    
+    for i, linha in enumerate(linhas):
+        stripped = linha.strip()
+        
+        # Detecta seção atual
+        if stripped.startswith("## "):
+            secao_atual = stripped.upper()
+            resultado.append(linha)
+            continue
+        
+        # Dentro de EXPERIÊNCIA: formata "Empresa, Cargo, Período" como negrito
+        if "EXPERIÊNCIA" in secao_atual or "EXPERIENCIA" in secao_atual:
+            # Padrão: "CNPEM, Estagiário em..., 2025 – Presente" ou "Empresa — Cargo"
+            if stripped and not stripped.startswith("#") and not stripped.startswith("**"):
+                # Detecta linha de cabeçalho de experiência (contém ano ou "Presente")
+                if re.search(r'\b(19|20)\d{2}\b', stripped) and any(sep in stripped for sep in [",", "—", "–", "-"]):
+                    # Verifica se parece um cabeçalho (tem empresa + cargo + data)
+                    if not stripped.startswith("**"):
+                        stripped = f"**{stripped}**"
+                        resultado.append(stripped)
+                        continue
+        
+        # Dentro de PROJETOS: formata nome do projeto como negrito
+        if "PROJETOS" in secao_atual or "PROJETO" in secao_atual:
+            if stripped and not stripped.startswith("#") and not stripped.startswith("**"):
+                # Detecta nome de projeto (geralmente tem link ou é curto e começa com maiúscula)
+                if ("github.com" in stripped.lower() or "gitlab.com" in stripped.lower()) and len(stripped) < 200:
+                    if not stripped.startswith("**"):
+                        # Separa nome do projeto da URL se possível
+                        stripped = f"**{stripped}**"
+                        resultado.append(stripped)
+                        continue
+                # Nome de projeto sem link (linha curta com maiúsculas)
+                elif len(stripped.split()) <= 12 and stripped[0].isupper() and i + 1 < len(linhas) and linhas[i+1].strip():
+                    prox = linhas[i+1].strip()
+                    # Se a próxima linha é um parágrafo descritivo, esta é o título
+                    if len(prox) > 50 and not prox.startswith("#") and not prox.startswith("**"):
+                        if not stripped.startswith("**"):
+                            stripped = f"**{stripped}**"
+                            resultado.append(stripped)
+                            continue
+        
+        # Dentro de FORMAÇÃO: formata nome da instituição como negrito
+        if "FORMAÇÃO" in secao_atual or "FORMACAO" in secao_atual:
+            if stripped and not stripped.startswith("#") and not stripped.startswith("**"):
+                # Detecta linha de formação (contém " — " ou "–" com instituição)
+                if any(sep in stripped for sep in ["—", "–"]) and len(stripped) < 200:
+                    if not stripped.startswith("**"):
+                        stripped = f"**{stripped}**"
+                        resultado.append(stripped)
+                        continue
+        
+        resultado.append(linha)
+    
+    return "\n".join(resultado)
+
+
 def converter_md_para_pdf(caminho_md: str) -> str:
     """
     Ferramenta para a IA converter o arquivo Markdown final em um PDF amigável para ATS.
+    
+    Usa extensão nl2br para que quebras de linha simples virem <br> no HTML.
+    Pré-processa o markdown para garantir títulos em negrito e estrutura visual clara.
     CSS otimizado para garantir que o conteúdo caiba em 1 página A4.
     """
     try:
         with open(caminho_md, "r", encoding="utf-8") as f:
             texto_md = f.read()
 
-        conteudo_html = markdown.markdown(texto_md)
+        # Pré-processamento: garante negrito em títulos de experiência/projetos
+        texto_md = _pre_processar_md_para_ats(texto_md)
+
+        # nl2br: converte quebras de linha simples em <br>, resolvendo o problema
+        # de texto colado quando o LLM usa \n simples em vez de \n\n
+        conteudo_html = markdown.markdown(texto_md, extensions=["nl2br"])
 
         html_completo = f"""
         <html>
@@ -120,8 +197,8 @@ def converter_md_para_pdf(caminho_md: str) -> str:
 
                     body {{
                         font-family: 'Noto Sans', 'Segoe UI', Arial, sans-serif;
-                        font-size: 9.5pt;
-                        line-height: 1.35;
+                        font-size: 9pt;
+                        line-height: 1.3;
                         color: #1f2937;
                         margin: 0;
                         padding: 0;
@@ -164,17 +241,17 @@ def converter_md_para_pdf(caminho_md: str) -> str:
                     /* ── Títulos de seção (OBJETIVO, HIGHLIGHTS, EXPERIÊNCIA, etc.) ── */
                     h2 {{
                         font-family: 'Liberation Serif', 'Times New Roman', serif;
-                        font-size: 12pt;
+                        font-size: 11pt;
                         font-weight: 700;
                         text-transform: uppercase;
                         color: #000000;
-                        margin: 10px 0 4px 0;
+                        margin: 7px 0 3px 0;
                         padding: 0;
                         border-bottom: 0.5pt solid #d1d5db;
                         padding-bottom: 2px;
                     }}
 
-                    /* ── Subtítulos de Experiência/Projetos ── */
+                    /* ── Subtítulos de Experiência/Projetos (h3) ── */
                     h3 {{
                         font-family: 'Noto Sans', 'Segoe UI', Arial, sans-serif;
                         font-size: 10pt;
@@ -194,16 +271,31 @@ def converter_md_para_pdf(caminho_md: str) -> str:
                         margin-bottom: 2px;
                     }}
 
-                    /* ── Negrito genérico nas seções ── */
+                    /* ── Negrito (títulos de experiência, projetos, formação) ── */
                     strong {{
                         font-weight: 700;
                         color: #000000;
+                        display: inline;
+                    }}
+
+                    /* ── Negrito como subtítulo visual (quando <strong> abre um parágrafo) ── */
+                    p > strong:first-child:last-child {{
+                        display: block;
+                        font-size: 10pt;
+                        margin-bottom: 1px;
                     }}
 
                     /* ── Parágrafos gerais (texto corrido ATS-friendly) ── */
                     p {{
-                        margin: 2px 0 4px 0;
-                        line-height: 1.4;
+                        margin: 1px 0 3px 0;
+                        line-height: 1.35;
+                    }}
+
+                    /* ── Quebras de linha (nl2br) ── */
+                    br {{
+                        display: block;
+                        content: "";
+                        margin-top: 1px;
                     }}
 
                     /* ── Listas (fallback caso bullet points escapem) ── */

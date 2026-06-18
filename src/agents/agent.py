@@ -414,7 +414,7 @@ def pipeline_cv(termos_ats: list) -> str:
             print(f"  🔧 Tecnologias Críticas: {', '.join(analise_data.tecnologias_criticas) if analise_data.tecnologias_criticas else 'Nenhuma'}")
 
             # GATE: Não aplicar para vagas com fit < 30
-            if analise_data.fit_score < 30:
+            if analise_data.fit_score < 20:
                 print(f"\n  ⏭️ IGNORADA — Fit score muito baixo ({analise_data.fit_score}%)")
                 print(f"  Gaps críticos: {', '.join(analise_data.gaps_criticos)}")
                 registrar_candidatura(
