@@ -74,16 +74,22 @@ def _create_session(p=None):
             # Para a página /login, costuma ser id="username" e id="password"
             # Para a homepage, costuma ser name="session_key" e name="session_password"
             
+            # Aguarda o campo de login aparecer
+            try:
+                page.wait_for_selector("input#username, input[name='session_key']", timeout=10000)
+            except:
+                pass
+            
             # 1. Tenta preencher o email
             if page.locator("input#username").count() > 0:
                 page.locator("input#username").fill(email)
-            else:
+            elif page.locator("input[name='session_key']").count() > 0:
                 page.locator("input[name='session_key']").fill(email)
                 
             # 2. Tenta preencher a senha
             if page.locator("input#password").count() > 0:
                 page.locator("input#password").fill(password)
-            else:
+            elif page.locator("input[name='session_password']").count() > 0:
                 page.locator("input[name='session_password']").fill(password)
                 
             # 3. Clica no botão de submit
@@ -180,18 +186,33 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
             page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(2000)
 
-        # Detecta seletor de vagas
+        # Aguarda o container principal carregar
+        try:
+            page.wait_for_selector(
+                "[componentkey*='job-card'], .scaffold-layout__list, .jobs-search-results-list",
+                timeout=10000
+            )
+        except:
+            pass
+
+        # Detecta seletor de vagas com compatibilidade para múltiplos layouts do LinkedIn (incluindo novo SDUI)
         selectors = [
+            "div[role='button'][componentkey*='job-card-component-ref']",
+            "div[componentkey*='job-card-component-ref']",
+            "[componentkey*='job-card']",
+            "div[data-view-name='job-card']",
+            "ul.scaffold-layout__list-container > li",
             ".scaffold-layout__list-item",
             "li[data-occludable-job-id]",
-            ".jobs-search-results__list-item",
             ".job-card-container",
+            "li:has(a[href*='/jobs/view/'])",
+            ".jobs-search-results__list-item",
         ]
         
         active_selector = None
         for selector in selectors:
             try:
-                page.wait_for_selector(selector, timeout=5000)
+                page.wait_for_selector(selector, timeout=4000)
                 active_selector = selector
                 break
             except:
@@ -213,6 +234,11 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
                     break
             
             page.screenshot(path="debug_linkedin.png")
+            try:
+                with open("debug_linkedin.html", "w", encoding="utf-8") as f:
+                    f.write(page.content())
+            except:
+                pass
             browser.close()
             
             if is_no_results:
@@ -231,15 +257,21 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
             try:
                 cards = page.locator(active_selector)
                 card = cards.nth(idx)
-                # card.scroll_into_view_if_needed()
+                try:
+                    card.scroll_into_view_if_needed(timeout=2000)
+                except:
+                    pass
                 card.click()
                 page.wait_for_timeout(1500)
 
                 apply_buttons_selectors = [
                     ".jobs-apply-button--top-card",
+                    "button:has-text('Candidatura simplificada')",
+                    "button:has-text('Easy Apply')",
+                    "button[aria-label*='Candidatura']",
+                    "button[aria-label*='candidatura']",
                     "button[aria-label*='Apply']",
                     "button[aria-label*='apply']",
-                    "button:has-text('Easy Apply')",
                     ".jobs-apply-button",
                 ]
 
@@ -254,20 +286,78 @@ def search_jobs(search_term: str, quantity: int = 5, regiao: str = None) -> list
                     print(f"⚠️ Botão de candidatura não encontrado para vaga {idx + 1}")
                     continue
 
+                # 1. URL da vaga (componentkey ID, link interno ou page.url)
                 job_url = page.url
-                
-                title_elem = page.locator(".job-details-jobs-unified-top-card__job-title")
-                title = title_elem.inner_text() if title_elem.count() > 0 else "N/A"
+                card_key = card.get_attribute("componentkey") or ""
+                import re
+                job_id_match = re.search(r'\d+', card_key)
+                if job_id_match:
+                    job_url = f"https://www.linkedin.com/jobs/view/{job_id_match.group()}/"
+                elif card.locator("a[href*='/jobs/view/']").count() > 0:
+                    href = card.locator("a[href*='/jobs/view/']").first.get_attribute("href")
+                    if href:
+                        job_url = href.split("?")[0]
 
-                desc_elem = page.locator("#job-details")
-                description = desc_elem.inner_text() if desc_elem.count() > 0 else ""
+                # Linhas de texto do card (backup estrutural)
+                card_text = card.inner_text()
+                card_lines = [l.strip() for l in card_text.split("\n") if l.strip() and l.strip() not in ["·", "Visto"]]
 
-                # Extrai metadados adicionais da vaga
-                company_elem = page.locator(".job-details-jobs-unified-top-card__company-name")
-                company = company_elem.inner_text().strip() if company_elem.count() > 0 else "N/A"
+                # 2. Título da vaga
+                title_selectors = [
+                    "div[id*='JobDetails'] a[href*='/jobs/view/']",
+                    "div[id*='JobDetails'] h1",
+                    "div[id*='JobDetails'] h2",
+                    ".job-details-jobs-unified-top-card__job-title",
+                    "a[href*='/jobs/view/']",
+                ]
+                title = "N/A"
+                for ts in title_selectors:
+                    if page.locator(ts).count() > 0:
+                        t = page.locator(ts).first.inner_text().strip()
+                        if t and t != "N/A":
+                            title = t
+                            break
+                if title == "N/A" and card_lines:
+                    title = card_lines[1] if len(card_lines) > 1 and "Selecionada" in card_lines[0] else card_lines[0]
 
-                location_elem = page.locator(".job-details-jobs-unified-top-card__bullet")
-                location = location_elem.first.inner_text().strip() if location_elem.count() > 0 else "N/A"
+                # 3. Descrição da vaga
+                desc_selectors = [
+                    "div[id*='JobDetails_AboutTheJob']",
+                    "div[componentkey*='AboutTheJob']",
+                    "#job-details",
+                    ".jobs-description__content",
+                ]
+                description = ""
+                for ds in desc_selectors:
+                    if page.locator(ds).count() > 0:
+                        description = page.locator(ds).first.inner_text().strip()
+                        if description:
+                            break
+
+                # 4. Empresa
+                company_selectors = [
+                    "div[id*='JobDetails'] .job-details-jobs-unified-top-card__company-name",
+                    ".job-details-jobs-unified-top-card__company-name",
+                ]
+                company = "N/A"
+                for cs in company_selectors:
+                    if page.locator(cs).count() > 0:
+                        company = page.locator(cs).first.inner_text().strip()
+                        break
+                if company == "N/A" and len(card_lines) >= 3:
+                    company = card_lines[2] if "Selecionada" in card_lines[0] else card_lines[1]
+
+                # 5. Localização
+                location_selectors = [
+                    ".job-details-jobs-unified-top-card__bullet",
+                ]
+                location = "N/A"
+                for ls in location_selectors:
+                    if page.locator(ls).count() > 0:
+                        location = page.locator(ls).first.inner_text().strip()
+                        break
+                if location == "N/A" and len(card_lines) >= 4:
+                    location = card_lines[3] if "Selecionada" in card_lines[0] else card_lines[2]
 
                 jobs_list.append({
                     "title": title,
@@ -549,10 +639,19 @@ def _fill_form_fields(modal, page, cv_path: str) -> bool:
     file_inputs = modal.locator("input[type='file']")
     
     if file_inputs.count() > 0:
-        cv_full_path = str(Path(__file__).parent.parent.parent / cv_path)
+        cv_target = Path(cv_path)
+        if not cv_target.is_absolute():
+            raiz = Path(__file__).resolve().parent.parent.parent
+            if (raiz / "cvs" / cv_target.name).exists():
+                cv_target = raiz / "cvs" / cv_target.name
+            elif (raiz / cv_path).exists():
+                cv_target = raiz / cv_path
+            else:
+                cv_target = raiz / "cvs" / cv_target.name
+        cv_full_path = str(cv_target)
         try:
             file_inputs.first.set_input_files(cv_full_path)
-            print(f"✅ CV anexado: {cv_path}")
+            print(f"✅ CV anexado: {cv_full_path}")
         except Exception as e:
             print(f"⚠️  Erro ao anexar CV: {str(e)[:40]}")
     
@@ -616,9 +715,12 @@ def apply_to_job(job_url: str, cv_filename: str) -> str:
         # ─────────────────────────────────────────────────────────────────
         apply_buttons = [
             ".jobs-apply-button--top-card",
+            "button:has-text('Candidatura simplificada')",
+            "button:has-text('Easy Apply')",
+            "button[aria-label*='Candidatura']",
+            "button[aria-label*='candidatura']",
             "button[aria-label*='Apply']",
             "button[aria-label*='apply']",
-            "button:has-text('Easy Apply')",
             ".jobs-apply-button",
         ]
         
@@ -663,6 +765,8 @@ def apply_to_job(job_url: str, cv_filename: str) -> str:
 
                 # Verifica se é última tela (botão enviar)
                 submit_buttons = [
+                    modal.locator("button:has-text('Enviar candidatura')"),
+                    modal.locator("button:has-text('Enviar')"),
                     modal.locator("button[aria-label*='Submit']"),
                     modal.locator("button[aria-label*='Enviar']"),
                     modal.locator("button[data-easy-apply-submit-button]"),
@@ -688,6 +792,9 @@ def apply_to_job(job_url: str, cv_filename: str) -> str:
                 # Avança para próxima tela
                 # ─────────────────────────────────────────────────────────────────
                 next_buttons = [
+                    modal.locator("button:has-text('Avançar')"),
+                    modal.locator("button:has-text('Next')"),
+                    modal.locator("button:has-text('Continuar')"),
                     modal.locator("button:has-text('Review')"),
                     modal.locator("button:has-text('Revisar')"),
                     modal.locator("button[data-easy-apply-next-button]"),

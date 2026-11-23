@@ -1,9 +1,11 @@
+from pygments.lexer import ProfilingRegexLexer
 from pypdf import PdfReader
 import os
 import markdown
 from weasyprint import HTML
 from markitdown import MarkItDown
 import re
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,6 +26,18 @@ def ler_cv_base_md() -> str:
     # 1. Tenta usar o arquivo definido no CV_PATH (selecionado no GUI)
     if cv_path_env and os.path.exists(cv_path_env):
         print(f"📖 Lendo currículo de: {cv_path_env}")
+
+        # Se for um diretório (ex: CV_PATH apontando para a pasta 'cvs')
+        if os.path.isdir(cv_path_env):
+            arquivos = [
+                os.path.join(cv_path_env, f) for f in os.listdir(cv_path_env)
+                if f.lower().endswith((".pdf", ".md"))
+            ]
+            if arquivos:
+                cv_path_env = arquivos[0]
+                print(f"  📄 Arquivo encontrado na pasta: {cv_path_env}")
+            else:
+                print(f"  ⚠️ Nenhum arquivo .pdf ou .md encontrado na pasta {cv_path_env}")
 
         # Se for PDF, converte para Markdown preservando estrutura
         if cv_path_env.lower().endswith(".pdf"):
@@ -81,9 +95,60 @@ def ler_cv_base_md() -> str:
 
     return "Erro: Nenhum currículo base encontrado. Por favor, selecione um PDF na interface ou crie um arquivo em src/cvs/cv_base_ia.md"
 
+def obter_diretorio_cvs() -> Path:
+    """
+    Retorna o diretório onde os currículos são armazenados (pasta 'cvs').
+    Cria a pasta automaticamente se ela não existir.
+    """
+    cv_path_env = os.getenv("CV_PATH")
+    if cv_path_env:
+        caminho_env = Path(cv_path_env)
+        if caminho_env.is_dir():
+            caminho_env.mkdir(parents=True, exist_ok=True)
+            return caminho_env
+        elif caminho_env.parent.exists() and caminho_env.parent.name == "cvs":
+            return caminho_env.parent
+
+    # Padrão: pasta 'cvs' na raiz do projeto
+    raiz_projeto = Path(__file__).resolve().parent.parent.parent
+    pasta_cvs = raiz_projeto / "cvs"
+    pasta_cvs.mkdir(parents=True, exist_ok=True)
+    return pasta_cvs
+
+
+def _save_file_in_path(file_path: str) -> Path:
+    """
+    Retorna o caminho onde o arquivo de CV será mantido na pasta 'cvs' do projeto.
+    Cria a pasta automaticamente se ela não existir.
+    """
+    pasta_cvs = obter_diretorio_cvs()
+    nome_arquivo = Path(file_path).name
+    return pasta_cvs / nome_arquivo
+
+
+def salvar_cv_em_cvs(nome_arquivo: str, conteudo: str) -> str:
+    """
+    Salva o arquivo de currículo dentro da pasta 'cvs' do projeto.
+
+    Args:
+        nome_arquivo: Nome do arquivo (ex: 'cv_vaga.md')
+        conteudo: Conteúdo textual do currículo a ser gravado
+
+    Returns:
+        str: Caminho absoluto do arquivo salvo dentro da pasta 'cvs'
+    """
+    caminho_final = _save_file_in_path(nome_arquivo)
+
+    with open(caminho_final, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+
+    print(f"📁 Currículo salvo com sucesso em: {caminho_final}")
+    return str(caminho_final)
+
+
 def salvar_cv_otimizado_md(conteudo_md: str, nome_vaga: str) -> str:
     """
-    Ferramenta para a IA salvar o currículo otimizado gerado.
+    Ferramenta para a IA salvar o currículo otimizado gerado dentro da pasta 'cvs'.
     """
     padrao = r"[^a-zA-Z0-9\s]"
     match = re.search(padrao, nome_vaga)
@@ -92,10 +157,8 @@ def salvar_cv_otimizado_md(conteudo_md: str, nome_vaga: str) -> str:
         print(f"Nome da vaga sanitizado para: {nome_vaga}")
 
     nome_arquivo = f"cv_{nome_vaga[:500].replace(' ', '_').lower()}.md"
-    print(f"Salvando currículo otimizado como {nome_arquivo}...")
-    with open(nome_arquivo, "w", encoding="utf-8") as f:
-        f.write(conteudo_md)
-    return nome_arquivo
+    caminho_salvo = salvar_cv_em_cvs(nome_arquivo=nome_arquivo, conteudo=conteudo_md)
+    return caminho_salvo
 
 def _pre_processar_md_para_ats(texto_md: str) -> str:
     """

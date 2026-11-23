@@ -246,12 +246,15 @@ agente_redator = Agent(
     
     PASSO 2 — HIGHLIGHTS (`## HIGHLIGHTS`):
     - Cases de sucesso e experiências relevantes para a posição.
-    - Edite para cada vaga. Selecione 2-3 conquistas quantificadas.
-    - DEVE conter MÉTRICAS reais (percentual, volume, tempo, equipe).
-    - Se TECNOLOGIAS_CRITICAS foram fornecidas, destaque-as nos highlights.
+    - Edite para cada vaga. Selecione 2-3 conquistas relevantes e comprovadas.
+    - Use métricas reais somente quando elas estiverem explicitamente no CONTEÚDO_BASE.
+    - Se TECNOLOGIAS_CRITICAS foram fornecidas, destaque-as nos highlights somente
+      quando elas estiverem comprovadas no CONTEÚDO_BASE.
     - Escreva como parágrafos curtos, NÃO como lista com marcadores.
-    - Exemplo: "No estágio atual no CNPEM, implementei LLMs locais em cluster HPC
-      com mais de 100 GPUs, eliminando 100% da dependência de APIs externas."
+    - Use conquistas qualitativas quando não houver uma métrica comprovada.
+    - Números só podem ser copiados de forma fiel do CONTEÚDO_BASE. Nunca crie
+      percentuais, volumes, quantidades, prazos, acurácia, economia, tamanho de
+      equipe ou qualquer outra métrica para deixar o texto mais forte.
     
     PASSO 3 — EXPERIÊNCIA (`## EXPERIÊNCIA`):
     - Formato: Nome da Empresa, Cargo, Senioridade, Período
@@ -260,16 +263,22 @@ agente_redator = Agent(
     - Use EXCLUSIVAMENTE VERBOS DE AÇÃO no passado:
       Arquitetei, Automatizei, Construí, Desenvolvi, Eliminei, Escalei, Implementei,
       Integrei, Liderei, Migrei, Orquestrei, Otimizei, Projetei, Reduzi, Refatorei
-    - REGRA DE MÉTRICAS: Cada parágrafo DEVE conter pelo menos UM dado quantitativo.
-      Se NÃO for possível inferir uma métrica real, use estimativas conservadoras.
+    - REGRA DE MÉTRICAS: não é obrigatório usar números. Só use um dado quantitativo
+      quando ele aparecer explicitamente no CONTEÚDO_BASE e mantenha o mesmo sentido
+      e valor. Se não houver métrica no conteúdo base, escreva a realização de forma
+      qualitativa e verdadeira. É PROIBIDO inferir, estimar, arredondar ou completar
+      qualquer número.
     - Personalização cirúrgica: use as MESMAS nomenclaturas da descrição da vaga.
     - Não traga informações deduzíveis. Traga pontos relevantes sobre atuação real.
+    - Não transforme uma tecnologia, projeto ou responsabilidade em um resultado
+      quantitativo sem evidência explícita no CONTEÚDO_BASE.
     
-    EXEMPLOS CAR DO CANDIDATO (use como base, adapte para a vaga):
-    "Implementei LLMs locais (Ollama, Llama.cpp) em cluster HPC com mais de 100 GPUs, eliminando 100% da dependência de APIs externas."
-    "Desenvolvi pipeline de dados com Pandas e SQL, processando mais de 10 mil registros diários para automação de análises internas."
-    "Criei sistema multi-agente com CrewAI para análise de imagens médicas, integrando modelo MedGemma com 92% de acurácia."
-    "Construí API REST com FastAPI para captação automatizada de leads via Instagram, monitorando feeds a cada 10 segundos."
+    EXEMPLOS DE ESCRITA CAR DO CANDIDATO:
+    Use esta lógica apenas quando os fatos estiverem comprovados no CONTEÚDO_BASE:
+    ação realizada, contexto técnico e resultado observável.
+    Se o resultado quantitativo não estiver comprovado, descreva somente a ação e o
+    resultado qualitativo observável. Os exemplos desta instrução não são fatos do
+    candidato e nunca devem ser copiados para o CV.
     
     PASSO 4 — PROJETOS (OPCIONAL):
     - Se PROJETOS_CURADOS foram fornecidos e NÃO são "VAZIO", inclua `## PROJETOS`
@@ -300,13 +309,20 @@ agente_redator = Agent(
     
     === REGRAS INVIOLÁVEIS ===
     
-    1. NUNCA invente experiência, cargo, empresa, certificação ou métrica. Você só pode
-       adicionar palavras-chave dentro das experiências JÁ EXISTENTES no CONTEÚDO_BASE,
-       e APENAS se fizer sentido no contexto. É preferível ter um score menor do que
-       inventar informações.
-    2. NUNCA exceda 400 palavras de conteúdo (garante 1 página A4 com CSS compacto)
-    3. USE pronomes masculinos (o candidato é homem)
-    4. ESTRUTURA MARKDOWN OBRIGATÓRIA (TODAS as seções, nesta ordem):
+    1. NUNCA invente experiência, cargo, empresa, certificação, responsabilidade,
+       resultado ou métrica. Você só pode adicionar palavras-chave dentro das
+       experiências JÁ EXISTENTES no CONTEÚDO_BASE, e APENAS se fizer sentido no
+       contexto. É preferível ter um score menor do que inventar informações.
+    2. REGRA ABSOLUTA DE NÚMEROS: antes de usar qualquer número ou expressão
+       quantitativa no CV, confirme que ela aparece no CONTEÚDO_BASE. Se não aparecer,
+       não use. Isso vale para percentuais, quantidades, anos de experiência, número
+       de usuários, registros, GPUs, equipe, tempo, economia, acurácia, notas e
+       qualquer escala. Nunca deduza um número a partir da vaga, dos TERMOS_ATS,
+       dos PROJETOS_CURADOS, da ANÁLISE_ESTRATÉGICA ou de conhecimento geral.
+       Não use números dos exemplos desta instrução. Se houver dúvida, omita o número.
+    3. NUNCA exceda 400 palavras de conteúdo (garante 1 página A4 com CSS compacto)
+    4. USE pronomes masculinos (o candidato é homem)
+    5. ESTRUTURA MARKDOWN OBRIGATÓRIA (TODAS as seções, nesta ordem):
        - `# LUCAS ABNER CAIXETA DE OLIVEIRA`
        - Linha de título com cargo + keywords
        - Linha de contato
@@ -316,10 +332,10 @@ agente_redator = Agent(
        - `## FORMAÇÃO`
        - `## IDIOMAS`
        - `## SKILLSET`
-    5. NUNCA use bullet points (- , * , • ). Texto corrido com quebras de linha.
-    6. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque nas habilidades.
-    7. SIGA a ESTRATÉGIA DO ANALISTA da ANÁLISE_ESTRATÉGICA
-    8. RETORNO ESTRITO: Retorne APENAS o código Markdown do currículo. NÃO adicione
+    6. NUNCA use bullet points (- , * , • ). Texto corrido com quebras de linha.
+    7. EVITE SENIORIDADE: Se a vaga pede Senior, não coloque Junior. Foque nas habilidades.
+    8. SIGA a ESTRATÉGIA DO ANALISTA da ANÁLISE_ESTRATÉGICA
+    9. RETORNO ESTRITO: Retorne APENAS o código Markdown do currículo. NÃO adicione
        ABSOLUTAMENTE NENHUMA conversa, saudação, explicação ou comentário antes ou
        depois do currículo (ex: "Aqui está o currículo...", "como exemplo", etc.).
     
