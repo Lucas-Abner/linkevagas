@@ -7,6 +7,7 @@ from markitdown import MarkItDown
 import re
 from pathlib import Path
 from dotenv import load_dotenv
+from src.utils.format_output import normalizar_formatacao_projetos
 
 load_dotenv()
 
@@ -157,77 +158,11 @@ def salvar_cv_otimizado_md(conteudo_md: str, nome_vaga: str) -> str:
         print(f"Nome da vaga sanitizado para: {nome_vaga}")
 
     nome_arquivo = f"cv_{nome_vaga[:500].replace(' ', '_').lower()}.md"
-    caminho_salvo = salvar_cv_em_cvs(nome_arquivo=nome_arquivo, conteudo=conteudo_md)
-    return caminho_salvo
-
-def _pre_processar_md_para_ats(texto_md: str) -> str:
-    """
-    Pré-processa o Markdown gerado pelo LLM para garantir boa renderização no PDF.
-    
-    Problemas resolvidos:
-    1. Títulos de empresa/projeto sem negrito → adiciona **negrito**
-    2. Linhas de contato sem separação visual → mantém como está
-    3. Normaliza quebras de linha para funcionar com nl2br
-    """
-    linhas = texto_md.split("\n")
-    resultado = []
-    secao_atual = ""
-    
-    for i, linha in enumerate(linhas):
-        stripped = linha.strip()
-        
-        # Detecta seção atual
-        if stripped.startswith("## "):
-            secao_atual = stripped.upper()
-            resultado.append(linha)
-            continue
-        
-        # Dentro de EXPERIÊNCIA: formata "Empresa, Cargo, Período" como negrito
-        if "EXPERIÊNCIA" in secao_atual or "EXPERIENCIA" in secao_atual:
-            # Padrão: "CNPEM, Estagiário em..., 2025 – Presente" ou "Empresa — Cargo"
-            if stripped and not stripped.startswith("#") and not stripped.startswith("**"):
-                # Detecta linha de cabeçalho de experiência (contém ano ou "Presente")
-                if re.search(r'\b(19|20)\d{2}\b', stripped) and any(sep in stripped for sep in [",", "—", "–", "-"]):
-                    # Verifica se parece um cabeçalho (tem empresa + cargo + data)
-                    if not stripped.startswith("**"):
-                        stripped = f"**{stripped}**"
-                        resultado.append(stripped)
-                        continue
-        
-        # Dentro de PROJETOS: formata nome do projeto como negrito
-        if "PROJETOS" in secao_atual or "PROJETO" in secao_atual:
-            if stripped and not stripped.startswith("#") and not stripped.startswith("**"):
-                # Detecta nome de projeto (geralmente tem link ou é curto e começa com maiúscula)
-                if ("github.com" in stripped.lower() or "gitlab.com" in stripped.lower()) and len(stripped) < 200:
-                    if not stripped.startswith("**"):
-                        # Separa nome do projeto da URL se possível
-                        stripped = f"**{stripped}**"
-                        resultado.append(stripped)
-                        continue
-                # Nome de projeto sem link (linha curta com maiúsculas)
-                elif len(stripped.split()) <= 12 and stripped[0].isupper() and i + 1 < len(linhas) and linhas[i+1].strip():
-                    prox = linhas[i+1].strip()
-                    # Se a próxima linha é um parágrafo descritivo, esta é o título
-                    if len(prox) > 50 and not prox.startswith("#") and not prox.startswith("**"):
-                        if not stripped.startswith("**"):
-                            stripped = f"**{stripped}**"
-                            resultado.append(stripped)
-                            continue
-        
-        # Dentro de FORMAÇÃO: formata nome da instituição como negrito
-        if "FORMAÇÃO" in secao_atual or "FORMACAO" in secao_atual:
-            if stripped and not stripped.startswith("#") and not stripped.startswith("**"):
-                # Detecta linha de formação (contém " — " ou "–" com instituição)
-                if any(sep in stripped for sep in ["—", "–"]) and len(stripped) < 200:
-                    if not stripped.startswith("**"):
-                        stripped = f"**{stripped}**"
-                        resultado.append(stripped)
-                        continue
-        
-        resultado.append(linha)
-    
-    return "\n".join(resultado)
-
+    print(f"Salvando currículo otimizado como {nome_arquivo}...")
+    conteudo_md = normalizar_formatacao_projetos(conteudo_md)
+    with open(nome_arquivo, "w", encoding="utf-8") as f:
+        f.write(conteudo_md)
+    return nome_arquivo
 
 def converter_md_para_pdf(caminho_md: str) -> str:
     """
@@ -241,12 +176,8 @@ def converter_md_para_pdf(caminho_md: str) -> str:
         with open(caminho_md, "r", encoding="utf-8") as f:
             texto_md = f.read()
 
-        # Pré-processamento: garante negrito em títulos de experiência/projetos
-        texto_md = _pre_processar_md_para_ats(texto_md)
-
-        # nl2br: converte quebras de linha simples em <br>, resolvendo o problema
-        # de texto colado quando o LLM usa \n simples em vez de \n\n
-        conteudo_html = markdown.markdown(texto_md, extensions=["nl2br"])
+        texto_md = normalizar_formatacao_projetos(texto_md)
+        conteudo_html = markdown.markdown(texto_md)
 
         html_completo = f"""
         <html>

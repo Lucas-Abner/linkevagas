@@ -9,7 +9,7 @@ from agno.eval.performance import PerformanceEval
 from agno.utils.pprint import pprint_run_response
 import os
 from dotenv import load_dotenv
-from src.utils.format_output import extrair_bloco_markdown
+from src.utils.format_output import extrair_bloco_markdown, normalizar_formatacao_projetos
 
 load_dotenv()
 
@@ -195,7 +195,7 @@ agente_curador_github = Agent(
     5. Retorne os projetos formatados EXATAMENTE no padrão Markdown do currículo:
        
        ## PROJETOS
-       ### NOME DO PROJETO (SEM COLCHETES) — [Repositório](URL do repositório retornado)
+       NOME DO PROJETO — [Repositório](URL do repositório retornado)
        *Desenvolvedor | [Período deduzido ou 'Recente']*
        - [Bullet point 1 focado na tecnologia/arquitetura relevante para a vaga, usando o contexto extraído do README]
        - [Bullet point 2]
@@ -284,6 +284,11 @@ agente_redator = Agent(
     - Se PROJETOS_CURADOS foram fornecidos e NÃO são "VAZIO", inclua `## PROJETOS`
       logo após EXPERIÊNCIA, mas adapte para texto corrido (sem bullets).
     - Se PROJETOS_CURADOS for "VAZIO", inclua apenas: Portfólio completo disponível em github.com/lucas-abner
+    - O nome de cada projeto deve ser um parágrafo comum, do mesmo tamanho do texto normal,
+      com SOMENTE o nome do projeto em negrito. Use exatamente:
+      `**Nome do Projeto** — descrição do projeto ou [Repositório](URL)`
+    - NUNCA use `###`, `####` ou qualquer outro título Markdown para projetos.
+    - NUNCA coloque a descrição, período, tecnologias ou link inteiro em negrito.
     
     PASSO 5 — FORMAÇÃO (`## FORMAÇÃO`):
     - Informe formação e traga informações RELEVANTES sobre ela.
@@ -602,6 +607,7 @@ def pipeline_cv(termos_ats: list) -> str:
 
 
         redacao = extrair_bloco_markdown(resultado_redacao)  # Limpa o output para pegar só o markdown
+        redacao = normalizar_formatacao_projetos(redacao)
 
         # ═══════════════════════════════════════════════════════════
         # ETAPA 3: SALVAR E CONVERTER
