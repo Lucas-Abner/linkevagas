@@ -158,11 +158,10 @@ def salvar_cv_otimizado_md(conteudo_md: str, nome_vaga: str) -> str:
         print(f"Nome da vaga sanitizado para: {nome_vaga}")
 
     nome_arquivo = f"cv_{nome_vaga[:500].replace(' ', '_').lower()}.md"
-    print(f"Salvando currículo otimizado como {nome_arquivo}...")
     conteudo_md = normalizar_formatacao_projetos(conteudo_md)
-    with open(nome_arquivo, "w", encoding="utf-8") as f:
-        f.write(conteudo_md)
-    return nome_arquivo
+    caminho_salvo = salvar_cv_em_cvs(nome_arquivo=nome_arquivo, conteudo=conteudo_md)
+    print(f"Salvando currículo otimizado como {caminho_salvo}...")
+    return caminho_salvo
 
 def converter_md_para_pdf(caminho_md: str) -> str:
     """
